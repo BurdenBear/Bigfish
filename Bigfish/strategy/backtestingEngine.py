@@ -78,6 +78,12 @@ class BacktestingEngine(object):
 
     #----------------------------------------------------------------------
     def connectWind(self):
+
+        #----        
+        self.__windConnected = True
+        return
+        #----
+        
         self.__windConnected=wind.connectWind()
         if self.__windConnected:
             self.writeLog(u"回测引擎连接Wind数据成功")
@@ -106,10 +112,9 @@ class BacktestingEngine(object):
             self.writeLog(u'MongoDB未连接，请检查')
     
     #----------------------------------------------------------------------       
-    def loadDataHistoryFromWind(self,symbol,startDate,endDate):
+    def loadDataHistoryFromWind(self, symbol, startTime, endTime, barType = '1'):
         if self.__windConnected:
-            self.listDataHistory = wind.getBarData(symbol,startDate,endDate)         
-
+            self.listDataHistory = wind.getBarData(symbol, startTime , endTime, barType = '1')         
             if not self.listDataHistory == None:
                 self.writeLog(u'历史K线数据载入完成')
             else:
@@ -137,12 +142,12 @@ class BacktestingEngine(object):
         listOrderExecuted = []         
         for ref,order in self.dictOrder.items():
             if order.direction == DIRECTION_BUY and \
-               order.price <= self.currentData['high']:
-                   self.executeLimitOrder(ref,order,self.currentData['high'])
+               order.price <= self.currentData['High']:
+                   self.executeLimitOrder(ref,order,self.currentData['High'])
                    listOrderExecuted.append(ref)
             if order.direction == DIRECTION_SELL and \
-               order.price >= self.currentData['low']:
-                   self.executeLimitOrder(ref,order,self.currentData['low'])
+               order.price >= self.currentData['Low']:
+                   self.executeLimitOrder(ref,order,self.currentData['Low'])
                    listOrderExecuted.append(ref)
         for ref in listOrderExecuted:
             del self.dictOrder[ref]
@@ -194,7 +199,7 @@ class BacktestingEngine(object):
         
         listDataHistory = self.listDataHistory        
         listKey = [k for k,v in listDataHistory.items() if type(v) == list]
-        length = len(listDataHistory['time'])    
+        length = len(listDataHistory['Time'])    
         data = {}        
         data['InstrumentID'] = listDataHistory['InstrumentID']
         for i in range(length):

@@ -181,6 +181,10 @@ class StrategyEngine(object):
         # value为该合约相关的停止单列表
         self.__dictStopOrder = {}
         
+        # 保存策略将使用到的与某标的物有关事件
+        # key为标的物代码
+        # value为标的物数据更新有关的事件
+        self.__eventType = {}
         '''
         # MongoDB数据库相关
         self.__mongoConnected = False
@@ -192,6 +196,14 @@ class StrategyEngine(object):
         # Wind数据相关
         self.__connectWind()
         self.__registerEvent()
+        
+    #
+    #----------------------------------------------------------------------
+    def addStrategy(self,strategy):
+        """添加已创建的策略实例"""
+        self.dictStrategy[strategy.name] = strategy
+        strategy.engine = self
+        self.registerStrategy(strategy.symbol,strategy)
         
     #----------------------------------------------------------------------
     def createStrategy(self, strategyName, strategySymbol, strategyClass, strategySetting):
@@ -218,6 +230,12 @@ class StrategyEngine(object):
     
     #----------------------------------------------------------------------
     def __connectWind(self):
+        
+        #---
+        self.__connectWind = True
+        return
+        #---
+        
         self.__windConnected=wind.connectWind()
         if self.__windConnected:
             self.writeLog(u"回测引擎连接Wind数据成功")
@@ -313,12 +331,12 @@ class StrategyEngine(object):
         
         if symbol in self.__dictSymbolStrategy:
             bar = Bar(symbol)
-            bar.open = data['open']
-            bar.high = data['high']
-            bar.low = data['low']
-            bar.close = data['close']
-            bar.volume = data['volume']
-            bar.time = data['time']
+            bar.open = data['Open']
+            bar.high = data['High']
+            bar.low = data['Low']
+            bar.close = data['Close']
+            bar.volume = data['Volume']
+            bar.time = data['Time']
             
             #将K线数据推送给每个策略
             for strategy in self.__dictSymbolStrategy[symbol]:

@@ -53,7 +53,7 @@ class EventEngine:
             handlerList.append(handler)
     
     def unregister(self,type_,handler):
-        try:
+        # try:
             handlerList = self.handlers[type_]
             if handler in handerList:
                 handlerList.remove(handler)
