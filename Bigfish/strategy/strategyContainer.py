@@ -1,47 +1,55 @@
 # -*- coding: utf-8 -*-
 import os
-from .strategyEngine import *
+import inspect
+import re
+from .strategyEngine import StrategyTemplate
 
 
 #math包里没这个函数，自己写个
 def sign (n):
-    if n > 0:
+    if abs(n) < 0.0000001:
+        return 0
+    elif n > 0:
         return 1
     elif n < 0:
         return -1
-    else:
-        return 0
         
 #%%策略容器，在初始化时定制一策略代码并在Onbar函数中运行他们
 ########################################################################
 class StrategyContainer (StrategyTemplate):
     
     #----------------------------------------------------------------------
-    def __init__(self, name , symbol, engine):
+    def __init__(self, name, symbols, intervals, engine, code):
         """Constructor""" 
-        self.name = name
-        self.symbol = symbol
+        self.name = name        
+        self.intervals = intervals
+        self.symbols = symbols
         self.engine = engine
-        self.strategysDict = {}
-        #K线数据缓存列表
-        self.listOpen = []
-        self.listHigh = []
-        self.listLow = []
-        self.listClose = []
-        self.listVolume = []
-        self.listTime = []
+        self.eventHandles = {}
+        self.eventTypes = {}
+        self.barDatas = {}
+        
+        #将策略容器与对应代码文件关联        
+        self.bindCodeToStrategy(code)
+        
         #基本数据变量,账户相关变量
         self.marketPosition = 0
         self.currentContracts = 0
-        self.onBarGeneratorInstance = self.onBarGenerator()
+        
         #是否完成了初始化
         self.initCompleted = False
         #在字典中保存Open,High,Low,Close,Volumn，CurrentBar，MarketPosition，
         #手动为exec语句提供local命名空间
-        self.loc = {'sell':self.sell, \
-                    'short':self.short, \
-                    'buy':self.buy, \
-                    'cover':self.cover}
+        self.loc = {
+                    'sell':self.sell, 
+                    'short':self.short, 
+                    'buy':self.buy, 
+                    'cover':self.cover,
+                    'marketposition':self.marketPosition,
+                    'currentcontracts':self.currentContracts,
+                    'datas':self.barDatas,
+                   }
+        
         #在这里或者在Setting中还需添加额外的字典管理方法
         #为策略容器中所用的策略（序列和非序列）创建相应缓存变量并将名字加入字典
 
@@ -50,45 +58,42 @@ class StrategyContainer (StrategyTemplate):
         self.sourcePath = sourcePath #设置策略代码存放目录
         
     #----------------------------------------------------------------------
-    #向容器中添加策略
-    def addStrategy(self, strategyName):
-        filePath = self.sourcePath+'/'+strategyName+'.py'
-        print(filePath)
-        if not os.path.exists(filePath):
-            print("信号文件不存在，请检查")            
-            return(False)
-        else:
-            if not strategyName in self.strategysDict:
-                with open(filePath, 'rb') as f:
-                    code = f.read()
-                    print(code)                    
-                    self.strategysDict[strategyName] = compile(code,'','exec')
-                    f.close()
-            print(strategyName,"信号添加成功")
-            return(True)
+    
+    #将策略容器与代码文件关联
+    def bindCodeToStrategy(self, code):
         
-    #----------------------------------------------------------------------
-    def onBarGenerator(self):
-        if self.initCompleted == False:
-            loc = self.loc
-            strategysDict = self.strategysDict
-            loc['Open'] = self.listOpen
-            loc['High'] = self.listHigh
-            loc['Low'] = self.listLow        
-            loc['Close'] = self.listClose
-            loc['Volume'] = self.listVolume
-            loc['Time'] = self.listTime
-            totalBar = 1
-            glb={}
-            self.initCompleted = True
-        while True:
-            loc['marketposition'] = self.marketPosition            
-            loc['totalbar'] = totalBar
-            for k , v in strategysDict.items():         
-                exec(v,loc,glb)
-                glb[k]()
-            totalBar += 1             
-            yield                    
+        def get_interval(interval):
+            if not isinstance(interval, str):
+                raise KeyError
+            pattern = re.compile(r'\A(?P<period>\d{,3})(?P<freq>[md])\Z')
+            match = pattern.match(interval)
+            try:
+                return(match.groupdict.get('period','1'),match.groupdict['freq'])
+            except KeyError as e:
+                print(e)
+                return None
+        
+        loc = {}           
+        exec(code,{},loc)
+        for k , v in loc.items():
+            if inspect.isfunction(v):
+                parameters = inspect.signature(v).parameters
+                intervals = parameters.get('interval',inspect._empty)
+                if isinstance(intervals, str) or isinstance(intervals, tuple):
+                    intervals = list[intervals]
+                if intervals == inspect._empty:
+                    intervals = self.intervals
+                if not isinstance(intervals, list):
+                    raise KeyError
+                for interval in intervals:
+                    period, freq = get_interval(interval)
+                if freq not in self.eventTypes:                            
+                    self.eventTypes[freq] = set(int(period))
+                else:
+                    self.eventTypes[freq].add(int(period))
+                self.engine.registerEvent(EVENTS_MAP['_'.join('EVENT', freq, period)])
+        print("<%s>信号添加成功" % name)
+        return(True)
     
     #----------------------------------------------------------------------    
     def onTrade(self, trade):

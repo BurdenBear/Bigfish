@@ -4,10 +4,7 @@
 from queue import Queue, Empty
 from threading import Thread
 
-# 第三方模块
-#from PyQt4.QtCore import QTimer
-
-# 自己开发的模块
+# 自定义模块
 from .eventType import *
 
 
@@ -166,10 +163,10 @@ class Event:
     """事件对象"""
 
     #----------------------------------------------------------------------
-    def __init__(self, type_=None):
+    def __init__(self, type_=None, dict_={}):
         """Constructor"""
         self.type_ = type_      # 事件类型
-        self.dict_ = {}         # 字典用于保存具体的事件数据
+        self.dict_ = dict_        # 字典用于保存具体的事件数据
 
 
 #----------------------------------------------------------------------

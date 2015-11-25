@@ -1,12 +1,18 @@
-# encoding: UTF-8
+# -*- coding: utf-8 -*-
+
+"""
+Created on Wed Nov 25 21:09:47 2015
+
+@author: BurdenBear
+"""
 
 from datetime import datetime
 '''
 from pymongo import Connection
 from pymongo.errors import *
 '''
-from ..event.eventEngine import *
-from ..wind import wind
+from Bigfish.event.eventEngine import *
+from Bigfish.wind import wind
 
 # 常量定义
 OFFSET_OPEN = 1           # 开仓

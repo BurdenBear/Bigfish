@@ -10,7 +10,6 @@
 建议将所有的常量定义放在该文件中，便于检查是否存在重复的现象。
 '''
 
-
 EVENT_TIMER = 'eTimer'                  # 计时器事件，每隔1秒发送一次
 EVENT_LOG = 'eLog'                      # 日志事件，通常使用某个监听函数直接显示
 
@@ -18,7 +17,6 @@ EVENT_TDLOGIN = 'eTdLogin'                  # 交易服务器登录成功事件
 
 EVENT_MARKETDATA = 'eMarketData'            # 行情推送事件
 EVENT_MARKETDATA_CONTRACT = 'eMarketData.'  # 特定合约的行情事件
-EVENT_BARDATA ='eBarData'
 
 EVENT_TRADE = 'eTrade'                      # 成交推送事件
 EVENT_TRADE_CONTRACT = 'eTrade.'            # 特定合约的成交事件
@@ -31,6 +29,10 @@ EVENT_POSITION = 'ePosition'                # 持仓查询回报事件
 EVENT_INSTRUMENT = 'eInstrument'            # 合约查询回报事件
 EVENT_INVESTOR = 'eInvestor'                # 投资者查询回报事件
 EVENT_ACCOUNT = 'eAccount'                  # 账户查询回报事件
+
+TIME_FRAME = (604800,86400,3600,1800,900,300,60)
+EVENT_BARDATA = {x:'eBarData'+x for x in TIME_FRAME}
+
 
 #----------------------------------------------------------------------
 def test():
