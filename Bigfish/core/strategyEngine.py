@@ -7,12 +7,10 @@ Created on Wed Nov 25 21:09:47 2015
 """
 
 from datetime import datetime
-'''
-from pymongo import Connection
-from pymongo.errors import *
-'''
+
+#自定义模块
 from Bigfish.event.eventEngine import *
-from Bigfish.wind import wind
+from Bigfish.utils.quote import Tick, Bar
 
 # 常量定义
 OFFSET_OPEN = 1           # 开仓
@@ -24,66 +22,6 @@ DIRECTION_SELL = -1        # 卖出
 PRICETYPE_LIMIT = 2      # 限价
 
 #%% 数据类型定义语句块
-########################################################################
-class Bar:
-    """K线数据对象（开高低收成交量时间）"""
-    
-    #----------------------------------------------------------------------    
-    def __init__(self,symbol):
-        self.symbol = symbol
-        self.openPrice = 0
-        self.highPrice = 0
-        self.lowPrice = 0
-        self.closePrice = 0
-        self.volume = 0
-        self.time = 0
-
-########################################################################
-class Tick:
-    """Tick数据对象"""
-
-    #----------------------------------------------------------------------
-    def __init__(self, symbol):
-        """Constructor"""
-        self.symbol = symbol        # 合约代码
-        
-        self.openPrice = 0          # OHLC
-        self.highPrice = 0
-        self.lowPrice = 0
-        self.lastPrice = 0
-        
-        self.volume = 0             # 成交量
-        self.openInterest = 0       # 持仓量
-        
-        self.upperLimit = 0         # 涨停价
-        self.lowerLimit = 0         # 跌停价
-        
-        self.time = ''              # 更新时间和毫秒
-        self.ms= 0
-        
-        self.bidPrice1 = 0          # 深度行情
-        self.bidPrice2 = 0
-        self.bidPrice3 = 0
-        self.bidPrice4 = 0
-        self.bidPrice5 = 0
-        
-        self.askPrice1 = 0
-        self.askPrice2 = 0
-        self.askPrice3 = 0
-        self.askPrice4 = 0
-        self.askPrice5 = 0
-        
-        self.bidVolume1 = 0
-        self.bidVolume2 = 0
-        self.bidVolume3 = 0
-        self.bidVolume4 = 0
-        self.bidVolume5 = 0
-        
-        self.askVolume1 = 0
-        self.askVolume2 = 0
-        self.askVolume3 = 0
-        self.askVolume4 = 0
-        self.askVolume5 = 0        
 
 
 ########################################################################
@@ -154,33 +92,28 @@ class StrategyEngine(object):
     """策略引擎"""
 
     #----------------------------------------------------------------------
-    def __init__(self, eventEngine, mainEngine, backtesting = False):
+    def __init__(self, eventEngine, backtesting = False):
         """Constructor"""
         self.__eventEngine = eventEngine
-        self.mainEngine = mainEngine
         self.backtesting = backtesting
         
-        # 获取代表今日的datetime
-        t = datetime.today()
-        self.today = t.replace(hour=0, minute=0, second=0, microsecond=0)
-        
         # 保存所有报单数据的字典
-        self.__dictOrder = {}
+        self.__orders = {}
         
         # 保存策略对象的字典
         # key为策略名称
         # value为策略对象
-        self.dictStrategy = {}
+        self.__strategys = {}
         
         # 保存合约代码和策略对象映射关系的字典
         # key为合约代码
         # value为交易该合约的策略列表
-        self.__dictSymbolStrategy = {}
+        self.__map_symbol_strategys = {}
         
         # 保存报单编号和策略对象映射关系的字典
         # key为报单编号
         # value为策略对象
-        self.__dictOrderRefStrategy = {}
+        self.__map_order_strategy = {}
         
         # 保存合约代码和相关停止单的字典
         # key为合约代码
@@ -191,31 +124,19 @@ class StrategyEngine(object):
         # key为标的物代码
         # value为标的物数据更新有关的事件
         self.__eventType = {}
-        '''
-        # MongoDB数据库相关
-        self.__mongoConnected = False
-        self.__mongoConnection = None
-        self.__mongoTickDB = None
-        self.__connectMongo()
-        '''
-        
-        # Wind数据相关
-        self.__connectWind()
-        self.__registerEvent()
-        
-    #
+
     #----------------------------------------------------------------------
     def addStrategy(self,strategy):
         """添加已创建的策略实例"""
-        self.dictStrategy[strategy.name] = strategy
+        self.__strategys[strategy.name] = strategy
         strategy.engine = self
-        self.registerStrategy(strategy.symbol,strategy)
+        self.registerStrategy(strategy.symbols, strategy)
         
     #----------------------------------------------------------------------
     def createStrategy(self, strategyName, strategySymbol, strategyClass, strategySetting):
         """创建策略"""
         strategy = strategyClass(strategyName, strategySymbol, self)
-        self.dictStrategy[strategyName] = strategy
+        self.__strategys[strategyName] = strategy
         strategy.loadSetting(strategySetting)
         
         # 订阅合约行情，注意这里因为是CTP，所以ExchangeID可以忽略
@@ -223,108 +144,19 @@ class StrategyEngine(object):
         
         # 注册策略监听
         self.registerStrategy(strategySymbol, strategy)
-    #----------------------------------------------------------------------
-    def __connectMongo(self):
-        """连接MongoDB数据库"""
-        try:
-            self.__mongoConnection = Connection()
-            self.__mongoConnected = True
-            self.__mongoTickDB = self.__mongoConnection['TickDB']
-            self.writeLog(u'策略引擎连接MongoDB成功')
-        except ConnectionFailure:
-            self.writeLog(u'策略引擎连接MongoDB失败')
-    
-    #----------------------------------------------------------------------
-    def __connectWind(self):
-        
-        #---
-        self.__connectWind = True
-        return
-        #---
-        
-        self.__windConnected=wind.connectWind()
-        if self.__windConnected:
-            self.writeLog(u"回测引擎连接Wind数据成功")
-        else:
-            self.writeLog(u"回测引擎连接Wind数据失败")
-            
-    #----------------------------------------------------------------------
-    def __recordTick(self, data):
-        """将Tick数据插入到MongoDB中"""
-        if self.__mongoConnected:
-            symbol = data['InstrumentID']
-            data['date'] = self.today
-            self.__mongoTickDB[symbol].insert(data)
-        
-    #----------------------------------------------------------------------
-    def loadTick(self, symbol, startDate, endDate=None):
-        """从MongoDB中读取Tick数据"""
-        if self.__mongoConnected:
-            collection = self.__mongoTickDB[symbol]
-            
-            # 如果输入了读取TICK的最后日期
-            if endDate:
-                cx = collection.find({'date':{'$gte':startDate, '$lte':endDate}})
-            else:
-                cx = collection.find({'date':{'$gte':startDate}})
-            return cx
-        else:
-            return None  
 
     #----------------------------------------------------------------------
     def updateMarketData(self, event):
-        """行情更新"""
-        data = event.dict_['data']
-        symbol = data['InstrumentID']
-        
+        """行情更新"""       
+        tick = event.content['data']
+        symbol = tick.symbol       
         # 检查是否存在交易该合约的策略
-        if symbol in self.__dictSymbolStrategy:
-            # 创建TICK数据对象并更新数据
-            tick = Tick(symbol)
-            
-            tick.openPrice = data['OpenPrice']
-            tick.highPrice = data['HighestPrice']
-            tick.lowPrice = data['LowestPrice']
-            tick.lastPrice = data['LastPrice']
-            
-            tick.volume = data['Volume']
-            tick.openInterest = data['OpenInterest']
-            
-            tick.upperLimit = data['UpperLimitPrice']
-            tick.lowerLimit = data['LowerLimitPrice']
-            
-            tick.time = data['UpdateTime']
-            tick.ms = data['UpdateMillisec']
-            
-            tick.bidPrice1 = data['BidPrice1']
-            tick.bidPrice2 = data['BidPrice2']
-            tick.bidPrice3 = data['BidPrice3']
-            tick.bidPrice4 = data['BidPrice4']
-            tick.bidPrice5 = data['BidPrice5']
-            
-            tick.askPrice1 = data['AskPrice1']
-            tick.askPrice2 = data['AskPrice2']
-            tick.askPrice3 = data['AskPrice3']
-            tick.askPrice4 = data['AskPrice4']
-            tick.askPrice5 = data['AskPrice5']   
-            
-            tick.bidVolume1 = data['BidVolume1']
-            tick.bidVolume2 = data['BidVolume2']
-            tick.bidVolume3 = data['BidVolume3']
-            tick.bidVolume4 = data['BidVolume4']
-            tick.bidVolume5 = data['BidVolume5']
-            
-            tick.askVolume1 = data['AskVolume1']
-            tick.askVolume2 = data['AskVolume2']
-            tick.askVolume3 = data['AskVolume3']
-            tick.askVolume4 = data['AskVolume4']
-            tick.askVolume5 = data['AskVolume5']   
-            
+        if symbol in self.__map_symbol_strategys:
             # 首先检查停止单是否需要发出
             self.__processStopOrder(tick)
             
             # 将该TICK数据推送给每个策略
-            for strategy in self.__dictSymbolStrategy[symbol]:
+            for strategy in self.__map_symbol_strategys[symbol]:
                 strategy.onTick(tick) 
         
         # 将数据插入MongoDB数据库，实盘建议另开程序记录TICK数据
@@ -332,10 +164,10 @@ class StrategyEngine(object):
         
     #----------------------------------------------------------------------
     def updateBarData(self,event):
-        data = event.dict_['data']
+        data = event.content['data']
         symbol = data['InstrumentID']
         
-        if symbol in self.__dictSymbolStrategy:
+        if symbol in self.__map_symbol_strategys:
             bar = Bar(symbol)
             bar.open = data['Open']
             bar.high = data['High']
@@ -345,7 +177,7 @@ class StrategyEngine(object):
             bar.time = data['Time']
             
             #将K线数据推送给每个策略
-            for strategy in self.__dictSymbolStrategy[symbol]:
+            for strategy in self.__map_symbol_strategys[symbol]:
                 strategy.onBar(bar)
             
             
@@ -403,7 +235,7 @@ class StrategyEngine(object):
         orderRef = data['OrderRef']
         
         # 检查是否存在监听该报单的策略
-        if orderRef in self.__dictOrderRefStrategy:
+        if orderRef in self.__map_order_strategy:
             
             # 创建Order数据对象
             order = Order(data['InstrumentID'])
@@ -423,11 +255,11 @@ class StrategyEngine(object):
             order.status = data['OrderStatus']
             
             # 推送给策略
-            strategy = self.__dictOrderRefStrategy[orderRef]
+            strategy = self.__map_order_strategy[orderRef]
             strategy.onOrder(order)
             
         # 记录该Order的数据
-        self.__dictOrder[orderRef] = data
+        self.__orders[orderRef] = data
     
     #----------------------------------------------------------------------
     def updateTrade(self, event):
@@ -437,7 +269,7 @@ class StrategyEngine(object):
         orderRef = data['OrderRef']
         print ('trade:', orderRef)
         
-        if orderRef in self.__dictOrderRefStrategy:
+        if orderRef in self.__map_order_strategy:
             
             # 创建Trade数据对象
             trade = Trade(data['InstrumentID'])
@@ -451,7 +283,7 @@ class StrategyEngine(object):
             trade.volume = data['Volume']
             
             # 推送给策略
-            strategy = self.__dictOrderRefStrategy[orderRef]
+            strategy = self.__map_order_strategy[orderRef]
             strategy.onTrade(trade)            
         
     #----------------------------------------------------------------------
@@ -476,7 +308,7 @@ class StrategyEngine(object):
                                             direction,
                                             offset)
             
-        self.__dictOrderRefStrategy[ref] = strategy
+        self.__map_order_strategy[ref] = strategy
         print ('ref:', ref)
         print ('strategy:', strategy.name)
         
@@ -487,7 +319,7 @@ class StrategyEngine(object):
         """
         撤单
         """
-        order = self.__dictOrder[orderRef]
+        order = self.__orders[orderRef]
         symbol = order['InstrumentID']
         contract = self.mainEngine.selectInstrument(symbol)
         
@@ -518,10 +350,10 @@ class StrategyEngine(object):
         """注册策略对合约TICK数据的监听"""
         # 尝试获取监听该合约代码的策略的列表，若无则创建
         try:
-            listStrategy = self.__dictSymbolStrategy[symbol]
+            listStrategy = self.__map_symbol_strategys[symbol]
         except KeyError:
             listStrategy = []
-            self.__dictSymbolStrategy[symbol] = listStrategy
+            self.__map_symbol_strategys[symbol] = listStrategy
         
         # 防止重复注册
         if strategy not in listStrategy:
@@ -567,13 +399,13 @@ class StrategyEngine(object):
     #----------------------------------------------------------------------
     def startAll(self):
         """启动所有策略"""
-        for strategy in self.dictStrategy.values():
+        for strategy in self.__strategys.values():
             strategy.start()
             
     #----------------------------------------------------------------------
     def stopAll(self):
         """停止所有策略"""
-        for strategy in self.dictStrategy.values():
+        for strategy in self.__strategys.values():
             strategy.stop()
     
     

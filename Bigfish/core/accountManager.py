@@ -6,39 +6,10 @@ Created on Wed Nov 25 20:46:00 2015
 """
 
 import json
+from Bigfish.utils.record import YieldRecord
+from Bigfish.utils.common import Currency
 
-###################################################################
-class dictlike():
-    def to_dict(self):
-        return ({slot:getattr(self,slot) for slot in self.__slots__})
-        
-###################################################################
-class TranscationRecord():
-    """交易记录对象"""    
-    __slots__ = ["strategy", "lot", "profit", "symbol", "ctime"]
-    def __init__(self, strategy="" , lot=0, profit=0, symbol="", ctime=None):
-        super().__init__        
-        self.strategy = strategy
-        self.lot = lot
-        self.profit = profit
-        self.symbol = symbol
-        self.ctime = ctime
-        
-###################################################################        
-class YieldRecord(dictlike):
-    """收益记录对象"""    
-    __slots__ = ["yield_", "ctime"]    
-    def __init__(self, yield_=0, ctime=None):
-        super().__init__        
-        self.yield_ = yield_
-        self.ctime = ctime
-     
-###################################################################
-class Currency:
-    """货币对象"""
-    def __init__(self, name=""):
-        self.__name = name
-        
+
 ###################################################################
 class AccountManager:
     """交易账户对象"""

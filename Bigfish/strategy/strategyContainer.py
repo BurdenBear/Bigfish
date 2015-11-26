@@ -21,10 +21,10 @@ class StrategyContainer (StrategyTemplate):
     #----------------------------------------------------------------------
     def __init__(self, name, symbols, intervals, engine, code):
         """Constructor""" 
-        self.name = name        
+        self.name = name
+        self.engine = engine
         self.intervals = intervals
         self.symbols = symbols
-        self.engine = engine
         self.eventHandles = {}
         self.eventTypes = {}
         self.barDatas = {}
@@ -124,9 +124,7 @@ class StrategyContainer (StrategyTemplate):
         self.listVolume.append(bar.volume)        
         self.listTime.append(bar.time)
         next(self.onBarGeneratorInstance)
-                
-                
-        
+
     #----------------------------------------------------------------------
     def start(self):
         """
@@ -153,67 +151,7 @@ class StrategyContainer (StrategyTemplate):
         setting通常是一个包含了参数设置的字典
         """
         pass
-        
-    #----------------------------------------------------------------------
-    def buy(self, price, volume, stopOrder=False):
-        """买入开仓"""
-        if self.trading:
-            if stopOrder:
-                so = self.engine.placeStopOrder(self.symbol, DIRECTION_BUY, 
-                                                  OFFSET_OPEN, price, volume, self)
-                return so
-            else:
-                ref = self.engine.sendOrder(self.symbol, DIRECTION_BUY,
-                                              OFFSET_OPEN, price, volume, self)
-                return ref
-        else:
-            return None
-    
-    #----------------------------------------------------------------------
-    def cover(self, price, volume, stopOrder=False):
-        """买入平仓"""
-        if self.trading:
-            if stopOrder:
-                so = self.engine.placeStopOrder(self.symbol, DIRECTION_BUY,
-                                                  OFFSET_CLOSE, price, volume, self)
-                return so
-            else:
-                ref = self.engine.sendOrder(self.symbol, DIRECTION_BUY,
-                                              OFFSET_CLOSE, price, volume, self)
-                return ref
-        else:
-            return None
-    
-    #----------------------------------------------------------------------
-    def sell(self, price, volume, stopOrder=False):
-        """卖出平仓"""
-        if self.trading:
-            if stopOrder:
-                so = self.engine.placeStopOrder(self.symbol, DIRECTION_SELL,
-                                                  OFFSET_CLOSE, price, volume, self)
-                return so
-            else:
-                ref = self.engine.sendOrder(self.symbol, DIRECTION_SELL,
-                                              OFFSET_CLOSE, price, volume, self)
-                return ref
-        else:
-            return None
-    
-    #----------------------------------------------------------------------
-    def short(self, price, volume, stopOrder=False):
-        """卖出开仓"""
-        if self.trading:
-            if stopOrder:
-                so = self.engine.placeStopOrder(self.symbol, DIRECTION_SELL,
-                                                  OFFSET_OPEN, price, volume, self)
-                return so
-            else:
-                ref = self.engine.sendOrder(self.symbol, DIRECTION_SELL, 
-                                              OFFSET_OPEN, price, volume, self)
-                return ref    
-        else:
-            return None
-    
+
     #----------------------------------------------------------------------
     def cancelOrder(self, orderRef):
         """撤单"""

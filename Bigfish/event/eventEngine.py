@@ -1,11 +1,11 @@
-# encoding: UTF-8
+# -*- coding: utf-8 -*-
 
 # 系统模块
 from queue import Queue, Empty
 from threading import Thread
 
 # 自定义模块
-from .eventType import *
+from Bigfish.event.eventType import *
 
 
 ########################################################################
@@ -156,38 +156,10 @@ class EventEngine:
     def put(self, event):
         """向事件队列中存入事件"""
         self.__queue.put(event)
-
-
-########################################################################
-class Event:
-    """事件对象"""
-
-    #----------------------------------------------------------------------
-    def __init__(self, type_=None, dict_={}):
-        """Constructor"""
-        self.type_ = type_      # 事件类型
-        self.dict_ = dict_        # 字典用于保存具体的事件数据
-
-
+        
 #----------------------------------------------------------------------
 def test():
     """测试函数"""
-    import sys
-    from datetime import datetime
-    '''
-    from PyQt4.QtCore import QCoreApplication
-    
-    def simpletest(event):
-        print (u'处理每秒触发的计时器事件：%s' % str(datetime.now()))
-    
-    app = QCoreApplication(sys.argv)
-    
-    ee = EventEngine()
-    ee.register(EVENT_TIMER, simpletest)
-    ee.start()
-    
-    app.exec_()
-    '''
     
 # 直接运行脚本可以进行测试
 if __name__ == '__main__':
