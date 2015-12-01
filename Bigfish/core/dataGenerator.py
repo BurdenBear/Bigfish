@@ -55,7 +55,7 @@ class dataGenerator:
             self.__data_events.append(temp[cursor_t])
             cursor_t += 1
             
-    def __start(self):
+    def start(self):
         time_frame_bits = self.__time_frame_bits
         for time_frame in TIME_FRAME:
             if time_frame_bits & 1:

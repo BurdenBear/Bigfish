@@ -6,11 +6,11 @@ Created on Wed Nov 25 21:09:47 2015
 @author: BurdenBear
 """
 
-from datetime import datetime
-
 #自定义模块
-from Bigfish.event.eventEngine import *
+from Bigfish.event.eventEngine.eventType import *
 from Bigfish.utils.quote import Tick, Bar
+from Bigfish.utils.trade import Order, Deal, Position
+from Bigfish.utils.common import deque
 
 # 常量定义
 OFFSET_OPEN = 1           # 开仓
@@ -41,33 +41,6 @@ class Trade:
         self.price = 0              # 成交价
         self.volume = 0             # 成交量
  
-
-########################################################################
-class Order:
-    """报单数据对象"""
-
-    #----------------------------------------------------------------------
-    def __init__(self, symbol):
-        """Constructor"""
-        self.symbol = symbol        # 合约代码
-        
-        self.orderRef = ''          # 报单编号
-        
-        self.direction = None       # 方向
-        self.offset = None          # 开平
-        self.price = 0              # 委托价
-        self.volumeOriginal = 0     # 报单量
-        self.volumeTraded = 0       # 已成交数量
-        
-        self.insertTime = ''        # 报单时间
-        self.cancelTime = ''        # 撤单时间
-        
-        self.frontID = 0            # 前置机编号
-        self.sessionID = 0          # 会话编号
-        
-        self.status = ''            # 报单状态代码
-
-
 ########################################################################
 class StopOrder:
     """
@@ -90,41 +63,51 @@ class StopOrder:
 ########################################################################
 class StrategyEngine(object):
     """策略引擎"""
-
+    CACHE_MAXLEN = 10000
     #----------------------------------------------------------------------
     def __init__(self, eventEngine, backtesting = False):
         """Constructor"""
-        self.__eventEngine = eventEngine
-        self.backtesting = backtesting
-        
-        # 保存所有报单数据的字典
-        self.__orders = {}
-        
-        # 保存策略对象的字典
-        # key为策略名称
-        # value为策略对象
-        self.__strategys = {}
-        
-        # 保存合约代码和策略对象映射关系的字典
-        # key为合约代码
-        # value为交易该合约的策略列表
-        self.__map_symbol_strategys = {}
-        
-        # 保存报单编号和策略对象映射关系的字典
-        # key为报单编号
-        # value为策略对象
-        self.__map_order_strategy = {}
-        
-        # 保存合约代码和相关停止单的字典
-        # key为合约代码
-        # value为该合约相关的停止单列表
-        self.__dictStopOrder = {}
-        
+        self.__eventEngine = eventEngine #事件处理引擎
+        self.__backtesting = backtesting # 是否为回测  
+        self.__orders = {} # 保存所有报单数据的字典
+        self.__deals = {} # 保存所有成交数据的字典
+        self.__position = {} # 保存所有仓位信息的字典
+        self.__strategys = {} # 保存策略对象的字典,key为策略名称,value为策略对象
+        self.__map_symbol_strategys = {} # 保存合约代码和策略对象映射关系的字典
+        self.__datas = {} # 统一的数据视图
+        self.__symbols = {} # 数据中所包含的交易物品种及各自存储的长度
+        self.__map_symbol_position = {}
         # 保存策略将使用到的与某标的物有关事件
         # key为标的物代码
         # value为标的物数据更新有关的事件
         self.__eventType = {}
-
+    #----------------------------------------------------------------------
+    def get_currentcontracts():
+        #TODO 现在持仓手数        
+        return()
+    #----------------------------------------------------------------------
+    def get_positions(self):
+        #TODO 读取每个品种的有效Position       
+        return(self.__map_symbol_position)
+    #----------------------------------------------------------------------
+    def get_datas(self):
+        return(self.__datas)
+    #----------------------------------------------------------------------
+    def add_symbols(self, symbols, max_length = 0):
+        for symbol in symbols:
+            if symbol not in self.__symbols:
+                self.__symbols[symbol] = 0
+            if max_length > self.__symbols[symbol]:
+                self.__symbols[symbol] = max_length
+    #----------------------------------------------------------------------
+    def initialize(self):
+        #TODO数据结构还需修改        
+        for symbol, maxlen in symbols.items():
+            if maxlen == 0:
+                self.__datas=deque([],maxlen=self.CACHE_MAXLEN)
+            else:
+                self.__datas=deque([],maxlen=maxlen)
+        
     #----------------------------------------------------------------------
     def addStrategy(self,strategy):
         """添加已创建的策略实例"""
@@ -331,12 +314,16 @@ class StrategyEngine(object):
                                         order['SessionID'])
         
     #----------------------------------------------------------------------
-    def __registerEvent(self):
+    def registerEvent(self, event, handle):
         """注册事件监听"""
+        #TODO  加入验证
+        self.__eventEngine.register(event, handle)
+        """
         self.__eventEngine.register(EVENT_BARDATA,self.updateBarData)
         self.__eventEngine.register(EVENT_MARKETDATA, self.updateMarketData)
         self.__eventEngine.register(EVENT_ORDER, self.updateOrder)
         self.__eventEngine.register(EVENT_TRADE ,self.updateTrade)
+        """
         
     #----------------------------------------------------------------------
     def writeLog(self, log):
@@ -407,143 +394,5 @@ class StrategyEngine(object):
         """停止所有策略"""
         for strategy in self.__strategys.values():
             strategy.stop()
-    
-    
-#%% 策略模板语句块（可作为抽象类通过继承来使用）
-########################################################################
-class StrategyTemplate(object):
-    """策略模板"""
-
-    #----------------------------------------------------------------------
-    def __init__(self, name, symbol, engine):
-        """Constructor"""
-        self.name = name            # 策略名称（注意唯一性）
-        self.symbol = symbol        # 策略交易的合约
-        self.engine = engine        # 策略引擎对象
-        
-        self.trading = False        # 策略是否启动交易
-        
-    #----------------------------------------------------------------------
-    def onTick(self, tick):
-        """行情更新"""
-        raise NotImplementedError
-    
-    #----------------------------------------------------------------------
-    def onTrade(self, trade):
-        """交易更新"""
-        raise NotImplementedError
-        
-    #----------------------------------------------------------------------
-    def onOrder(self, order):
-        """报单更新"""
-        raise NotImplementedError
-    
-    #----------------------------------------------------------------------
-    def onStopOrder(self, orderRef):
-        """停止单更新"""
-        raise NotImplementedError
-    
-    #----------------------------------------------------------------------
-    def onBar(self, kbar):
-        """K线数据更新"""
-                
-        raise NotImplementedError
-        
-    #----------------------------------------------------------------------
-    def start(self):
-        """
-        启动交易
-        这里是最简单的改变self.trading
-        有需要可以重新实现更复杂的操作
-        """
-        self.trading = True
-        self.engine.writeLog(self.name + u'开始运行')
-        
-    #----------------------------------------------------------------------
-    def stop(self):
-        """
-        停止交易
-        同上
-        """
-        self.trading = False
-        self.engine.writeLog(self.name + u'停止运行')
-        
-    #----------------------------------------------------------------------
-    def loadSetting(self, setting):
-        """
-        载入设置
-        setting通常是一个包含了参数设置的字典
-        """
-        raise NotImplementedError
-        
-    #----------------------------------------------------------------------
-    def buy(self, price, volume, stopOrder=False):
-        """买入开仓"""
-        if self.trading:
-            if stopOrder:
-                so = self.engine.placeStopOrder(self.symbol, DIRECTION_BUY, 
-                                                  OFFSET_OPEN, price, volume, self)
-                return so
-            else:
-                ref = self.engine.sendOrder(self.symbol, DIRECTION_BUY,
-                                              OFFSET_OPEN, price, volume, self)
-                return ref
-        else:
-            return None
-    
-    #----------------------------------------------------------------------
-    def cover(self, price, volume, stopOrder=False):
-        """买入平仓"""
-        if self.trading:
-            if stopOrder:
-                so = self.engine.placeStopOrder(self.symbol, DIRECTION_BUY,
-                                                  OFFSET_CLOSE, price, volume, self)
-                return so
-            else:
-                ref = self.engine.sendOrder(self.symbol, DIRECTION_BUY,
-                                              OFFSET_CLOSE, price, volume, self)
-                return ref
-        else:
-            return None
-    
-    #----------------------------------------------------------------------
-    def sell(self, price, volume, stopOrder=False):
-        """卖出平仓"""
-        if self.trading:
-            if stopOrder:
-                so = self.engine.placeStopOrder(self.symbol, DIRECTION_SELL,
-                                                  OFFSET_CLOSE, price, volume, self)
-                return so
-            else:
-                ref = self.engine.sendOrder(self.symbol, DIRECTION_SELL,
-                                              OFFSET_CLOSE, price, volume, self)
-                return ref
-        else:
-            return None
-    
-    #----------------------------------------------------------------------
-    def short(self, price, volume, stopOrder=False):
-        """卖出开仓"""
-        if self.trading:
-            if stopOrder:
-                so = self.engine.placeStopOrder(self.symbol, DIRECTION_SELL,
-                                                  OFFSET_OPEN, price, volume, self)
-                return so
-            else:
-                ref = self.engine.sendOrder(self.symbol, DIRECTION_SELL, 
-                                              OFFSET_OPEN, price, volume, self)
-                return ref    
-        else:
-            return None
-    
-    #----------------------------------------------------------------------
-    def cancelOrder(self, orderRef):
-        """撤单"""
-        self.engine.cancelOrder(orderRef)
-        
-    #----------------------------------------------------------------------
-    def cancelStopOrder(self, so):
-        """撤销停止单"""
-        self.engine.cancelStopOrder(so)
     
     
