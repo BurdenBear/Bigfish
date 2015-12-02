@@ -20,7 +20,32 @@ class Assert:
         self.symbol = symbol
         #TODO 资产的其他信息，如滑点、手续费等信息
         #将以json的形式存于文件或数据库中
-        
+###################################################################
+class DictLike():
+    __slots__=[]
+    def to_dict(self):
+        cls = self.__class__.__name__
+        return ({slot.replace('__',''):getattr(self,slot.replace('__','_%s__'%cls))
+                for slot in self.__slots__})
+    def __getitem__(self,key):
+        return (getattr(self,key))
+###################################################################
+class HasID:
+    """有自增长ID对象的通用方法"""
+    __slots__=[]
+    __AUTO_INC_NEXT = 0
+    #XXX 是否把自增写入
+    @classmethod 
+    def next_auto_inc(cls):
+        cls.__AUTO_INC_NEXT += 1
+        return cls.__AUTO_INC_NEXT
+    @classmethod
+    def get_auto_inc(cls):
+        return(cls.__AUTO_INC_NEXT)
+    @classmethod
+    def set_auto_inc(cls, num):
+        cls.__AUTO_INC_NEXT = num
+###################################################################
 class SeriesList(UserList):
     __MAX_LENGTH = 10000    
     def __init__(self, initlist=None, max_length=None):

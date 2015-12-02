@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
 #系统模块
+import ast
 import inspect
-import copy
 
 #自定义模块
 from Bigfish.event.handle import BarEventHandle
-from Bigfish.utils.ast import LocalInjector
+from Bigfish.utils.ast import LocalsInjector
 from Bigfish.utils.common import deque
 #math包里没这个函数，自己写个
 def sign (n):
@@ -30,7 +30,7 @@ class Strategy:
         self.symbols = set()
         self.start_time = None
         self.end_time = None
-        self.event_handles = {}
+        self.event_handlers = {}
         #TODO
         self.time_frame_bits = 0
         
@@ -74,16 +74,18 @@ class Strategy:
             pass
         def get_global_attrs(locals_):
             for name,attr in self.ATTRS_MAP:
-                setattr(self, attr, locals_.get(name))
-                
+                setattr(self, attr, locals_.get(name))               
+        
         locals_ = {}           
-        exec(code,copy.copy(self.__locals),locals_)
+        exec(code,{},locals_)
         get_global_attrs(locals_)
-        to_inject = []    
+        to_inject = {}
+        events = {}
+        temp = {key:'__globals["%s"]' % key for key in self.__locals_.keys()}
         for k , v in locals_.items():
             if inspect.isfunction(v):
                 paras = inspect.signature(v).parameters
-                data_handler = get_parameter_default(para, "data_handler", lambda x:isinstance(x,bool), True)
+                data_handler = get_parameter_default(paras, "data_handler", lambda x:isinstance(x,bool), True)
                 if not data_handler:
                     continue
                 custom = get_parameter_default(paras, "custom", lambda x:isinstance(x,bool), True)                               
@@ -95,14 +97,23 @@ class Strategy:
                     #TODO 处理max_length                    
                     self.time_frame_bits |= get_time_frame_bits(time_frame)
                     #XXX 是否有封装的必要                    
-                    #self.event_handles[k] = BarEventHandle(self.engine, symbols[0])
+                    #self.event_handlers[k] = BarEventHandle(self.engine, symbols[0])
                     for field in ["open","high","low","close","time","volume"]:
-                        self.__locals_[field] = self.__locals_["datas"][symbols[0]][field]                        
-                    to_inject[k] = self.__locals_
+                        temp[field] = '__globals["datas"]["%s"]["%s"]' % (symbols[0], field)
+                    to_inject[k] = temp
+                    #TODO支持多品种事件             
+                    events[k] = get_data_event(symbols)
                 else:
-                    #自定义事件处理
+                    #TODO自定义事件处理
                     pass
-        print("<%s>信号添加成功" % name)
+        injector = LocalsInjector(to_inject)
+        ast_ = ast.parse(code)
+        injector.visit(ast_)
+        exec(compile(ast_,'<string>',mode='exec'), self.__locals_+[], locals_)
+        for key, event in events():
+             self.event_handlers[key] = locals_[key]()
+             self.engine.register_event(event,self.event_handlers[key].__next__)
+        print("<%s>信号添加成功" % self.name)
         return(True)
     
     #----------------------------------------------------------------------
@@ -157,6 +168,8 @@ class Strategy:
         同上
         """
         self.trading = False
+        for handler in self.event_handlers.values():
+            handler.close()
         self.engine.writeLog(self.name + u'停止运行')
         
     #----------------------------------------------------------------------

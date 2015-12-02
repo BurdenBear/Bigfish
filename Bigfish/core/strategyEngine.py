@@ -5,6 +5,7 @@ Created on Wed Nov 25 21:09:47 2015
 
 @author: BurdenBear
 """
+import time
 
 #自定义模块
 from Bigfish.event.eventEngine.eventType import *
@@ -67,16 +68,16 @@ class StrategyEngine(object):
     #----------------------------------------------------------------------
     def __init__(self, eventEngine, backtesting = False):
         """Constructor"""
-        self.__eventEngine = eventEngine #事件处理引擎
+        self.__eventEngine = eventEngine # 事件处理引擎
         self.__backtesting = backtesting # 是否为回测  
-        self.__orders = {} # 保存所有报单数据的字典
+        self.__orders_done = {} # 保存所有已处理报单数据的字典
+        self.__orders_todo = {} # 保存所有未处理报单（即挂单）数据的字典
         self.__deals = {} # 保存所有成交数据的字典
         self.__position = {} # 保存所有仓位信息的字典
-        self.__strategys = {} # 保存策略对象的字典,key为策略名称,value为策略对象
-        self.__map_symbol_strategys = {} # 保存合约代码和策略对象映射关系的字典
+        self.__strategys = {} # 保存策略对象的字典,key为策略名称,value为策略对象        
         self.__datas = {} # 统一的数据视图
-        self.__symbols = {} # 数据中所包含的交易物品种及各自存储的长度
-        self.__map_symbol_position = {}
+        self.__symbols = {} # 数据中所包含的交易物品种及各自存储的长度        
+        self.__map_symbol_position = {} # 保存交易物代码和有效仓位对应映射关系的字典
         # 保存策略将使用到的与某标的物有关事件
         # key为标的物代码
         # value为标的物数据更新有关的事件
@@ -268,9 +269,16 @@ class StrategyEngine(object):
             # 推送给策略
             strategy = self.__map_order_strategy[orderRef]
             strategy.onTrade(trade)            
-        
     #----------------------------------------------------------------------
-    def sendOrder(self, symbol, direction, offset, price, volume, strategy):
+    def __send_order_to_broker(self,order):
+        if self.__backtesting:
+            pass
+            #TODO 市价单成交
+        else:
+            pass
+            #TODO 实盘交易
+    #----------------------------------------------------------------------
+    def send_order(self, order):
         """
         发单（仅允许限价单）
         symbol：合约代码
@@ -280,41 +288,32 @@ class StrategyEngine(object):
         volume：下单手数
         strategy：策略对象 
         """
-        contract = self.mainEngine.selectInstrument(symbol)
-        
-        if contract:
-            ref = self.mainEngine.sendOrder(symbol,
-                                            contract['ExchangeID'],
-                                            price,
-                                            PRICETYPE_LIMIT,
-                                            volume,
-                                            direction,
-                                            offset)
-            
-        self.__map_order_strategy[ref] = strategy
-        print ('ref:', ref)
-        print ('strategy:', strategy.name)
-        
-        return ref
-
+        #TODO 更多属性的处理
+        if self.check_order(order):
+            self.__orders[order.id] = order
+            time_now = time.time()            
+            order.time_setup = int(time_now)
+            order.time_setup_msc = int((time_now-int(time_now))*(10**6))
+            if order.type <= 1:#market order                        
+                self.__send_order_to_broker(order)
+                self.__orders_done[order.id] = order 
+            else:
+                self.__orders_todo[order.id] = order
+            return(True)
+        else:
+            return(False)
     #----------------------------------------------------------------------
-    def cancelOrder(self, orderRef):
+    def cancel_order(self, order_id):
         """
         撤单
         """
-        order = self.__orders[orderRef]
-        symbol = order['InstrumentID']
-        contract = self.mainEngine.selectInstrument(symbol)
-        
-        if contract:
-            self.mainEngine.cancelOrder(symbol,
-                                        contract['ExchangeID'],
-                                        orderRef,
-                                        order['FrontID'],
-                                        order['SessionID'])
-        
+        if order_id == 0:
+            self.__orders_todo = {}
+        else:
+            if order_id in self.__orders_todo:
+                del(d[order_id])
     #----------------------------------------------------------------------
-    def registerEvent(self, event, handle):
+    def register_event(self, event, handle):
         """注册事件监听"""
         #TODO  加入验证
         self.__eventEngine.register(event, handle)
@@ -345,54 +344,27 @@ class StrategyEngine(object):
         # 防止重复注册
         if strategy not in listStrategy:
             listStrategy.append(strategy)
-
-    #----------------------------------------------------------------------
-    def placeStopOrder(self, symbol, direction, offset, price, volume, strategy):
-        """
-        下停止单（运行于本地引擎中）
-        注意这里的price是停止单的触发价
-        """
-        # 创建止损单对象
-        so = StopOrder(symbol, direction, offset, price, volume, strategy)
-        
-        # 获取该合约相关的止损单列表
-        try:
-            listSO = self.__dictStopOrder[symbol]
-        except KeyError:
-            listSO = []
-            self.__dictStopOrder[symbol] = listSO
-        
-        # 将该止损单插入列表中
-        listSO.append(so)
-        
-        return so
-    
-    #----------------------------------------------------------------------
-    def cancelStopOrder(self, so):
-        """撤销停止单"""
-        symbol = so.symbol
-        
-        try:
-            listSO = self.__dictStopOrder[symbol]
-
-            if so in listSO:
-                listSO.remove(so)
-            
-            if not listSO:
-                del self.__dictStopOrder[symbol]
-        except KeyError:
-            pass
-        
+      
     #----------------------------------------------------------------------
     def startAll(self):
         """启动所有策略"""
         for strategy in self.__strategys.values():
-            strategy.start()
-            
+            strategy.start()         
     #----------------------------------------------------------------------
     def stopAll(self):
         """停止所有策略"""
         for strategy in self.__strategys.values():
             strategy.stop()
-    
-    
+    #----------------------------------------------------------------------
+    def sell(symbol, volume, price=None, stop=False ,limit=False):
+        self.send_order()
+    #----------------------------------------------------------------------
+    def buy(symbol, volume, price=None, stop=False, limit=False):
+        self.send_order()
+    #----------------------------------------------------------------------
+    def cover(symbol, volume, price=None, stop=False, limit=False):
+        self.send_order()
+    #----------------------------------------------------------------------
+    def short(symbol, volume, price=None, stop=False, limit=False):
+        position = self.__map_symbol_position[symbol]
+        if position:

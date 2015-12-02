@@ -25,6 +25,7 @@ class BarEventHandle(EventHandle):
         self.__handle_generator.send(context)
         
     def __handle_generator(self):
+        
         while True:
             self.__func()
             
