@@ -10,55 +10,8 @@ import time
 #自定义模块
 from Bigfish.event.eventEngine.eventType import *
 from Bigfish.utils.quote import Tick, Bar
-from Bigfish.utils.trade import Order, Deal, Position
+from Bigfish.utils.trade import *
 from Bigfish.utils.common import deque
-
-# 常量定义
-OFFSET_OPEN = 1           # 开仓
-OFFSET_CLOSE = -1          # 平仓
-
-DIRECTION_BUY = 1         # 买入
-DIRECTION_SELL = -1        # 卖出
-
-PRICETYPE_LIMIT = 2      # 限价
-
-#%% 数据类型定义语句块
-
-
-########################################################################
-class Trade:
-    """成交数据对象"""
-
-    #----------------------------------------------------------------------
-    def __init__(self, symbol):
-        """Constructor"""
-        self.symbol = symbol        # 合约代码
-        
-        self.orderRef = ''          # 报单号
-        self.tradeID = ''           # 成交编号
-        
-        self.direction = None       # 方向
-        self.offset = None          # 开平
-        self.price = 0              # 成交价
-        self.volume = 0             # 成交量
- 
-########################################################################
-class StopOrder:
-    """
-    停止单对象
-    用于实现价格突破某一水平后自动追入
-    即通常的条件单和止损单
-    """
-
-    #----------------------------------------------------------------------
-    def __init__(self, symbol, direction, offset, price, volume, strategy):
-        """Constructor"""
-        self.symbol = symbol
-        self.direction = direction
-        self.offset = offset
-        self.price = price
-        self.volume = volume
-        self.strategy = strategy
 
 #%% 策略引擎语句块
 ########################################################################
@@ -108,171 +61,99 @@ class StrategyEngine(object):
                 self.__datas=deque([],maxlen=self.CACHE_MAXLEN)
             else:
                 self.__datas=deque([],maxlen=maxlen)
+        self.__eventEngine.register(EVENT_BARDATA,self.update_bar_data)
+        self.__eventEngine.register(EVENT_MARKETDATA, self.update_market_data)
+        self.__eventEngine.register(EVENT_ORDER, self.update_order)
+        self.__eventEngine.register(EVENT_DEAL ,self.update_deal)
         
     #----------------------------------------------------------------------
     def addStrategy(self,strategy):
         """添加已创建的策略实例"""
-        self.__strategys[strategy.name] = strategy
+        self.__strategys[strategy.get_id()] = strategy
         strategy.engine = self
         self.registerStrategy(strategy.symbols, strategy)
         
     #----------------------------------------------------------------------
-    def createStrategy(self, strategyName, strategySymbol, strategyClass, strategySetting):
-        """创建策略"""
-        strategy = strategyClass(strategyName, strategySymbol, self)
-        self.__strategys[strategyName] = strategy
-        strategy.loadSetting(strategySetting)
-        
-        # 订阅合约行情，注意这里因为是CTP，所以ExchangeID可以忽略
-        self.mainEngine.subscribe(strategySymbol, None)
-        
-        # 注册策略监听
-        self.registerStrategy(strategySymbol, strategy)
-
-    #----------------------------------------------------------------------
-    def updateMarketData(self, event):
+    def update_market_data(self, event):
         """行情更新"""       
-        tick = event.content['data']
-        symbol = tick.symbol       
-        # 检查是否存在交易该合约的策略
-        if symbol in self.__map_symbol_strategys:
-            # 首先检查停止单是否需要发出
-            self.__processStopOrder(tick)
-            
-            # 将该TICK数据推送给每个策略
-            for strategy in self.__map_symbol_strategys[symbol]:
-                strategy.onTick(tick) 
-        
-        # 将数据插入MongoDB数据库，实盘建议另开程序记录TICK数据
-        self.__recordTick(data)
-        
+        #TODO行情数据        
+        pass
     #----------------------------------------------------------------------
-    def updateBarData(self,event):
-        data = event.content['data']
-        symbol = data['InstrumentID']
-        
-        if symbol in self.__map_symbol_strategys:
-            bar = Bar(symbol)
-            bar.open = data['Open']
-            bar.high = data['High']
-            bar.low = data['Low']
-            bar.close = data['Close']
-            bar.volume = data['Volume']
-            bar.time = data['Time']
-            
-            #将K线数据推送给每个策略
-            for strategy in self.__map_symbol_strategys[symbol]:
-                strategy.onBar(bar)
-            
-            
+    def update_bar_data(self,event):
+        pass    
     #----------------------------------------------------------------------
-    def __processStopOrder(self, tick):
+    def __process_order(self, tick):
         """处理停止单"""
-        symbol = tick.symbol
-        lastPrice = tick.lastPrice
-        upperLimit = tick.upperLimit
-        lowerLimit = tick.lowerLimit
-        
-        # 如果当前有该合约上的止损单
-        if symbol in self.__dictStopOrder:
-            # 获取止损单列表
-            listSO = self.__dictStopOrder[symbol]     # SO:stop order
-            
-            # 准备一个空的已发止损单列表
-            listSent = []
-            
-            for so in listSO:
-                # 如果是买入停止单，且最新成交价大于停止触发价
-                if so.direction == DIRECTION_BUY and lastPrice >= so.price:
-                    # 以当日涨停价发出限价单买入
-                    ref = self.sendOrder(symbol, DIRECTION_BUY, so.offset, 
-                                         upperLimit, so.volume, strategy)    
-                    
-                    # 触发策略的止损单发出更新
-                    so.strategy.onStopOrder(ref)
-                    
-                    # 将该止损单对象保存到已发送列表中
-                    listSent.append(so)
-                
-                # 如果是卖出停止单，且最新成交价小于停止触发价
-                elif so.direction == DIRECTION_SELL and lastPrice <= so.price:
-                    ref = self.sendOrder(symbol, DIRECTION_SELL, so.offset,
-                                         lowerLimit, so.volume, strategy)
-                    
-                    so.strategy.onStopOrder(ref)
-                    
-                    listSent.append(so)
-                    
-            # 从停止单列表中移除已经发单的停止单对象
-            if listSent:
-                for so in listSent:
-                    listSO.remove(so)
-                    
-            # 检查停止单列表是否为空，若为空，则从停止单字典中移除该合约代码
-            if not listSO:
-                del self.__dictStopOrder[symbol]
+        pass
 
     #----------------------------------------------------------------------
-    def updateOrder(self, event):
+    def update_order(self, event):
         """报单更新"""
-        data = event.dict_['data']
-        orderRef = data['OrderRef']
-        
-        # 检查是否存在监听该报单的策略
-        if orderRef in self.__map_order_strategy:
-            
-            # 创建Order数据对象
-            order = Order(data['InstrumentID'])
-            
-            order.orderRef = data['OrderRef']
-            order.direction = data['Direction']
-            order.offset = data['CombOffsetFlag']
-            
-            order.price = data['LimitPrice']
-            order.volumeOriginal = data['VolumeTotalOriginal']
-            order.volumeTraded = data['VolumeTraded']
-            order.insertTime = data['InsertTime']
-            order.cancelTime = data['CancelTime']
-            order.frontID = data['FrontID']
-            order.sessionID = data['SessionID']
-            
-            order.status = data['OrderStatus']
-            
-            # 推送给策略
-            strategy = self.__map_order_strategy[orderRef]
-            strategy.onOrder(order)
-            
-        # 记录该Order的数据
-        self.__orders[orderRef] = data
-    
+        #TODO 成交更新
     #----------------------------------------------------------------------
-    def updateTrade(self, event):
+    def update_trade(self, event):
         """成交更新"""
-        print ('updateTrade')
-        data = event.dict_['data']
-        orderRef = data['OrderRef']
-        print ('trade:', orderRef)
-        
-        if orderRef in self.__map_order_strategy:
-            
-            # 创建Trade数据对象
-            trade = Trade(data['InstrumentID'])
-            
-            trade.orderRef = orderRef
-            trade.tradeID = data['TradeID']
-            trade.direction = data['Direction']
-            trade.offset = data['OffsetFlag']
-    
-            trade.price = data['Price']
-            trade.volume = data['Volume']
-            
-            # 推送给策略
-            strategy = self.__map_order_strategy[orderRef]
-            strategy.onTrade(trade)            
+        #TODO 成交更新
+        pass
+    #----------------------------------------------------------------------
+    def __update_position(self, deal):
+        def sign(num):
+            if abs(num) <= 10**-7:
+                return(0)
+            elif num > 0:
+                return(1)
+            else:
+                return(-1)
+        position_prev = self.__map_symbol_position[deal.symbol]
+        position_now = Position(deal.symbol)
+        position_now.prev_id = position_prev.get_id()
+        position_prev.next_id = position_now.get_id()
+        position = position_prev.type
+        #XXX常量定义改变这里的映射函数也可能改变
+        if deal.type * position >= 0:
+            if position == 0:
+                position_now.price_open = deal.price
+                position_now.time_open = deal.time
+                position_now.time_open_msc = deal.time_msc
+            position_now.volume = deal.volume + position_prev.volume
+            position_now.type = position
+            position_now.price_current = (position_prev.price_current*position_prev.volume
+            +deal.price*deal.volume)/position_now.volume 
+        else:
+            contracts = position_prev.volume - deal.volume
+            position_now.volume = abs(constracts)
+            position_now.price_current = (position_prev.price_current*position_prev.volume
+            -deal.price*deal.volume)/(position_prev.volume-deal.volume)
+            position_now.type = position * sign(contracts)
+        position_now.time_update = deal.time
+        position_now.time_update_msc = deal.time_msc
+        deal.position = position_now.get_id()
+        position_now.deal = deal.get_id()
+        self.__map_symbol_position[deal.symbol] = position_now
+    #----------------------------------------------------------------------
+    def check_order(order):
+        if not isinstance(Order):
+            return(False)
+        #TODO更多关于订单合法性的检查
+        return(True)
     #----------------------------------------------------------------------
     def __send_order_to_broker(self,order):
         if self.__backtesting:
-            pass
+            time_now = time.time()
+            order.time_done = int(time_now)
+            order.time_done_msc = int((time_now-int(time_now))*(10**6))
+            order.volume_current = order.volume_initial
+            deal = Deal(order.symbol)
+            deal.time = order.time_done
+            deal.time_msc = order.time_done_msc
+            deal.volume = order.volume_initial
+            deal.type = 1-((order.type&1)<<1)
+            deal.price = self.__datas[order.symbol]["close"][0]
+            deal.profit = deal.price*deal.type*deal.volume
+            #TODO加入手续费等
+            order.deal = deal.get_id()
+            deal.order = order.get_id()
+            self.__update_position(self, deal)
             #TODO 市价单成交
         else:
             pass
@@ -290,15 +171,14 @@ class StrategyEngine(object):
         """
         #TODO 更多属性的处理
         if self.check_order(order):
-            self.__orders[order.id] = order
-            time_now = time.time()            
+            time_now = time.time()
             order.time_setup = int(time_now)
             order.time_setup_msc = int((time_now-int(time_now))*(10**6))
             if order.type <= 1:#market order                        
                 self.__send_order_to_broker(order)
-                self.__orders_done[order.id] = order 
+                self.__orders_done[order.get_id()] = order 
             else:
-                self.__orders_todo[order.id] = order
+                self.__orders_todo[order.get_id()] = order
             return(True)
         else:
             return(False)
@@ -311,60 +191,64 @@ class StrategyEngine(object):
             self.__orders_todo = {}
         else:
             if order_id in self.__orders_todo:
-                del(d[order_id])
+                del(self.__orders_todo[order_id])
     #----------------------------------------------------------------------
     def register_event(self, event, handle):
         """注册事件监听"""
         #TODO  加入验证
         self.__eventEngine.register(event, handle)
-        """
-        self.__eventEngine.register(EVENT_BARDATA,self.updateBarData)
-        self.__eventEngine.register(EVENT_MARKETDATA, self.updateMarketData)
-        self.__eventEngine.register(EVENT_ORDER, self.updateOrder)
-        self.__eventEngine.register(EVENT_TRADE ,self.updateTrade)
-        """
-        
     #----------------------------------------------------------------------
     def writeLog(self, log):
         """写日志"""
         event = Event(type_=EVENT_LOG)
         event.dict_['log'] = log
         self.__eventEngine.put(event)
-        
     #----------------------------------------------------------------------
-    def registerStrategy(self, symbol, strategy):
-        """注册策略对合约TICK数据的监听"""
-        # 尝试获取监听该合约代码的策略的列表，若无则创建
-        try:
-            listStrategy = self.__map_symbol_strategys[symbol]
-        except KeyError:
-            listStrategy = []
-            self.__map_symbol_strategys[symbol] = listStrategy
-        
-        # 防止重复注册
-        if strategy not in listStrategy:
-            listStrategy.append(strategy)
-      
-    #----------------------------------------------------------------------
-    def startAll(self):
+    def start_all(self):
         """启动所有策略"""
         for strategy in self.__strategys.values():
             strategy.start()         
     #----------------------------------------------------------------------
-    def stopAll(self):
+    def stop_all(self):
         """停止所有策略"""
         for strategy in self.__strategys.values():
             strategy.stop()
+    #TODO 对限价单的支持    
     #----------------------------------------------------------------------
-    def sell(symbol, volume, price=None, stop=False ,limit=False):
-        self.send_order()
-    #----------------------------------------------------------------------
-    def buy(symbol, volume, price=None, stop=False, limit=False):
-        self.send_order()
-    #----------------------------------------------------------------------
-    def cover(symbol, volume, price=None, stop=False, limit=False):
-        self.send_order()
-    #----------------------------------------------------------------------
-    def short(symbol, volume, price=None, stop=False, limit=False):
+    def sell(symbol, volume, price=None, stop=False ,limit=False, strategy=None):
+        order = Order(symbol, ORDER_TYPE_SELL, strategy)
         position = self.__map_symbol_position[symbol]
         if position:
+            if position.type <= 0:
+                return#XXX可能的返回值
+        order.volume_initial = volume
+        self.send_order(order)
+    #----------------------------------------------------------------------
+    def buy(symbol, volume, price=None, stop=False, limit=False, strategy=None):
+        order = Order(symbol, ORDER_TYPE_BUY, strategy)
+        position = self.__map_symbol_position[symbol]
+        if position:
+            if position.type < 0:
+                order.volume_initial = volume + position.volume
+                return(self.send_order(order))  
+        order.volume_initial = volume
+        return(self.send_order(order))
+    #----------------------------------------------------------------------
+    def cover(symbol, volume, price=None, stop=False, limit=False, strategy=None):
+        order = Order(symbol, ORDER_TYPE_BUY, strategy)
+        position = self.__map_symbol_position[symbol]
+        if position:
+            if position.type >= 0:
+                return#XXX可能的返回值
+        order.volume_initial = volume
+        return(self.send_order(order))
+    #----------------------------------------------------------------------
+    def short(symbol, volume, price=None, stop=False, limit=False, strategy=None):
+        order = Order(symbol, ORDER_TYPE_SELL, strategy)        
+        position = self.__map_symbol_position[symbol]
+        if position:
+            if position.type > 0:
+                order.volume_initial = volume + position.volume
+                return(self.send_order(order))
+        order.volume_initial = volume
+        return(self.send_order(order))

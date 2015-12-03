@@ -18,8 +18,8 @@ EVENT_TDLOGIN = 'eTdLogin'                  # 交易服务器登录成功事件
 EVENT_MARKETDATA = 'eMarketData'            # 行情推送事件
 EVENT_MARKETDATA_CONTRACT = 'eMarketData.'  # 特定合约的行情事件
 
-EVENT_TRADE = 'eTrade'                      # 成交推送事件
-EVENT_TRADE_CONTRACT = 'eTrade.'            # 特定合约的成交事件
+EVENT_DEAL = 'eDeal'                      # 成交推送事件
+EVENT_DEAL_CONTRACT = 'eDeal.'            # 特定合约的成交事件
 
 EVENT_ORDER = 'eOrder'                      # 报单推送事件
 EVENT_ORDER_ORDERREF = 'eOrder.'            # 特定报单号的报单事件

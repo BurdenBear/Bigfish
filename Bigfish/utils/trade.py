@@ -9,29 +9,30 @@ from Bigfish.utils.common import HasID, DictLike
 
 #ENUM_POSITION_TYPE
 POSITION_TYPE_BUY = 1
+POSITION_TYPE_NONE = 0
 POSITION_TYPE_SELL = -1
 
 class Position(HasID, DictLike):
     """仓位对象"""
     
-    __slots__ = ["symbol", "get_id", "__id", "time_open", "time_open_msc", "time_update", "time_update_msc",
-                 "type_", "volume", "price_open", "price_current", "price_profit", "strategy" ]
+    __slots__ = ["symbol", "deal", "get_id", "__id", "time_open", "time_open_msc", "time_update", "time_update_msc",
+                 "type", "volume", "price_open", "price_current", "price_profit", "strategy" ]
 
-    def __init__(self, symbol=None, prev_id=None, next_id=None):
+    def __init__(self, symbol=None):
         self.symbol = symbol
         self.__id = self.__class__.next_auto_inc()
-        self.prev_id = prev_id
-        self.next_id = next_id
+        self.prev_id = None
+        self.next_id = None
         self.time_open = None
         self.time_open_msc = None
         self.time_update = None
         self.time_update_msc = None
-        self.type_ = None
+        self.type = None
         self.volume = None
         self.price_open = None
         self.price_current = None
         self.price_profit = None
-        self.strategy = 0
+        self.strategy = None
         
     def get_id(self):
         return(self.__id)
@@ -73,11 +74,11 @@ class Order(HasID, DictLike):
     """订单对象"""
     __slots__ = ["symbol", "__id", "deal", "time_setup", "time_expiration", "time_done", 
                  "time_setup_msc", "time_expiration_msc", "time_done_msc",
-                 "type_", "state", "type_filling", "type_life", "volume_initial",
+                 "type", "state", "type_filling", "type_life", "volume_initial",
                  "volume_current", "price_open", "price_stop_limit", "stop_loss", 
                  "take_profit", "strategy"]
     
-    def __init__(self, symbol=None, type_=None):
+    def __init__(self, symbol=None, type_=None, strategy=None):
         self.symbol = symbol
         self.deal = None
         self.__id = self.next_auto_inc()
@@ -87,7 +88,7 @@ class Order(HasID, DictLike):
         self.time_setup_msc = None
         self.time_expiration_msc = None
         self.time_done_msc = None
-        self.type_ = type_
+        self.type = type_
         self.state = None
         self.type_filling = None
         self.type_life = None
@@ -97,16 +98,15 @@ class Order(HasID, DictLike):
         self.price_stop_limit = 0
         self.stop_loss = 0
         self.take_profit = 0
-        self.strategy = None
+        self.strategy = strategy
         
     def get_id(self):
         return(self.__id)
        
-class Balance(HasID):
-    """收支对象"""
-    #TODO 可能并不需要
-    
-
+#ENUM_DEAL_TYPE      
+DEAL_TYPE_BUY = 1
+DEAL_TYPE_SELL = -1
+#ENUM_DEAL_ENTRY
 DEAL_ENTRY_IN = 1 # Entry in
 DEAL_ENTRY_OUT = 0 # Entry out
 DEAL_ENTRY_INOUT = -1 # Reverse

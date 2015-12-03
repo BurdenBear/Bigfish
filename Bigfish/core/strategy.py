@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 #系统模块
+from functools import partial
 import ast
 import inspect
 
@@ -22,8 +23,9 @@ def sign (n):
 class Strategy:    
     ATTRS_MAP = {"period":"time_frame", "symbols":"symbols", "start":"start_time", "end":"end_time", "maxlen":"max_length" }  
     #----------------------------------------------------------------------
-    def __init__(self, engine, name, code):
+    def __init__(self, engine, id_, name, code):
         """Constructor""" 
+        self.__id = id_        
         self.name = name
         self.engine = engine
         self.time_frame = None
@@ -42,10 +44,10 @@ class Strategy:
         #在字典中保存Open,High,Low,Close,Volumn，CurrentBar，MarketPosition，
         #手动为exec语句提供local命名空间
         self.__locals_ = {
-                    'sell':self.engine.sell, 
-                    'short':self.engine.short, 
-                    'buy':self.engine.buy, 
-                    'cover':self.engine.cover,
+                    'sell':partial(self.engine.sell, strategy = self.__id),
+                    'short':partial(self.engine.short, strategy = self.__id),
+                    'buy':partial(self.engine.buy, strategy = self.id_),
+                    'cover':partial(self.engine.cover, strategy = self.__id),
                     'marketposition':self.engine.get_positions(),
                     'currentcontracts':self.engine.get_currentcontracts(),
                     'datas':self.engine.get_datas()
@@ -53,6 +55,8 @@ class Strategy:
         
         #在这里或者在Setting中还需添加额外的字典管理方法
         #为策略容器中所用的策略（序列和非序列）创建相应缓存变量并将名字加入字典
+    def get_id(self):
+        return(self.__id)
     #----------------------------------------------------------------------   
     #将策略容器与策略代码关联
     def bind_code_to_strategy(self, code):
@@ -127,14 +131,7 @@ class Strategy:
         """trade.direction = 1 买单,trade.direction = -1 卖单
            marketposition = 1 持多仓,-1持空仓,0为空仓
         """
-        marketPosition = self.marketPosition
-        if trade.direction * marketPosition >= 0:
-                self.currentContracts += trade.volume
-                self.marketPosition = trade.direction
-        else:
-                currentConstracts = self.currentContracts - trade.volume
-                self.currentConstracts = abs(currentConstracts)
-                self.marketPosition = marketPosition * sign(currentConstracts)
+        
     
     #----------------------------------------------------------------------
     def onOrder(self, order):
