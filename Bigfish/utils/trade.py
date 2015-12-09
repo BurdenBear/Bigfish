@@ -15,12 +15,12 @@ POSITION_TYPE_SELL = -1
 class Position(HasID, DictLike):
     """仓位对象"""
     
-    __slots__ = ["symbol", "deal", "get_id", "__id", "time_open", "time_open_msc", "time_update", "time_update_msc",
+    __slots__ = ["symbol", "deal", "__id", "time_open", "time_open_msc", "time_update", "time_update_msc",
                  "type", "volume", "price_open", "price_current", "price_profit", "strategy" ]
 
     def __init__(self, symbol=None):
         self.symbol = symbol
-        self.__id = self.__class__.next_auto_inc()
+        self.__id = self.next_auto_inc()
         self.prev_id = None
         self.next_id = None
         self.time_open = None
@@ -34,7 +34,7 @@ class Position(HasID, DictLike):
         self.price_profit = None
         self.strategy = None
         
-    def get_id(self):
+    def get_id(self): 
         return(self.__id)
 
 #ENUM_ORDER_STATE

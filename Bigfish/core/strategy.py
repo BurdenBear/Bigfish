@@ -6,21 +6,13 @@ import ast
 import inspect
 
 #自定义模块
-from Bigfish.event.handle import BarEventHandle
+from Bigfish.event.handle import SymbolsListener
 from Bigfish.utils.ast import LocalsInjector
-from Bigfish.utils.common import deque
-#math包里没这个函数，自己写个
-def sign (n):
-    if abs(n) < 0.0000001:
-        return 0
-    elif n > 0:
-        return 1
-    elif n < 0:
-        return -1
-       
+from Bigfish.utils.common import check_time_frame, HasID
+
 #%%策略容器，在初始化时定制一策略代码并在Onbar函数中运行他们
 ########################################################################
-class Strategy:    
+class Strategy(HasID):    
     ATTRS_MAP = {"period":"time_frame", "symbols":"symbols", "start":"start_time", "end":"end_time", "maxlen":"max_length" }  
     #----------------------------------------------------------------------
     def __init__(self, engine, id_, name, code):
@@ -32,13 +24,9 @@ class Strategy:
         self.symbols = set()
         self.start_time = None
         self.end_time = None
-        self.event_handlers = {}
-        #TODO
-        self.time_frame_bits = 0
-        
-        #将策略容器与对应代码文件关联   
-        self.bind_code_to_strategy(code)
-        
+        self.handlers = {}
+        self.listeners = {}
+        self.__context = {}      
         #是否完成了初始化
         self.initCompleted = False
         #在字典中保存Open,High,Low,Close,Volumn，CurrentBar，MarketPosition，
@@ -46,15 +34,16 @@ class Strategy:
         self.__locals_ = {
                     'sell':partial(self.engine.sell, strategy = self.__id),
                     'short':partial(self.engine.short, strategy = self.__id),
-                    'buy':partial(self.engine.buy, strategy = self.id_),
+                    'buy':partial(self.engine.buy, strategy = self.__id),
                     'cover':partial(self.engine.cover, strategy = self.__id),
                     'marketposition':self.engine.get_positions(),
                     'currentcontracts':self.engine.get_currentcontracts(),
-                    'datas':self.engine.get_datas()
+                    'datas':self.engine.get_datas(),
+                    'context':self.__context
                    }
+        #将策略容器与对应代码文件关联   
+        self.bind_code_to_strategy(code)
         
-        #在这里或者在Setting中还需添加额外的字典管理方法
-        #为策略容器中所用的策略（序列和非序列）创建相应缓存变量并将名字加入字典
     def get_id(self):
         return(self.__id)
     #----------------------------------------------------------------------   
@@ -73,53 +62,52 @@ class Strategy:
                     raise KeyError("变量%s所赋值不合法", name) 
             else:
                 return(default)
-        def get_time_frame_bits(time_frame):
-            #TODO ---
-            pass
         def get_global_attrs(locals_):
-            for name,attr in self.ATTRS_MAP:
+            for name,attr in self.ATTRS_MAP.items():
                 setattr(self, attr, locals_.get(name))               
         
-        locals_ = {}           
-        exec(code,{},locals_)
+        locals_ = {}
+        globals_ = {}           
+        exec(code,globals_,locals_)
         get_global_attrs(locals_)
+        globals_.update(self.__locals_)
+        globals_.update(locals_)
+        self.engine.start_time = self.start_time
+        self.engine.end_time = self.end_time
+        check_time_frame(self.time_frame)
         to_inject = {}
-        events = {}
         temp = {key:'__globals["%s"]' % key for key in self.__locals_.keys()}
-        for k , v in locals_.items():
-            if inspect.isfunction(v):
-                paras = inspect.signature(v).parameters
+        for key , value in locals_.items():
+            if inspect.isfunction(value):
+                paras = inspect.signature(value).parameters
                 data_handler = get_parameter_default(paras, "data_handler", lambda x:isinstance(x,bool), True)
                 if not data_handler:
                     continue
-                custom = get_parameter_default(paras, "custom", lambda x:isinstance(x,bool), True)                               
+                custom = get_parameter_default(paras, "custom", lambda x:isinstance(x,bool), False)                               
                 if not custom:
                     #TODO加入真正的验证方法
                     symbols = get_parameter_default(paras, "symbols", lambda x:True, self.symbols)                   
                     time_frame = get_parameter_default(paras, "timeframe", lambda x:True, self.time_frame)
-                    max_length = get_parameter_default(paras, "maxlen", lambda x: isinstance(int)and(x>0), None)
-                    #TODO 处理max_length                    
-                    self.time_frame_bits |= get_time_frame_bits(time_frame)
-                    #XXX 是否有封装的必要                    
+                    max_length = get_parameter_default(paras, "maxlen", lambda x: isinstance(int)and(x>0), 0)                    
+                    check_time_frame(time_frame)                 
+                    self.engine.add_symbols(symbols,time_frame,max_length)                
+                    #XXX 是否有封装的必要
                     #self.event_handlers[k] = BarEventHandle(self.engine, symbols[0])
                     for field in ["open","high","low","close","time","volume"]:
-                        temp[field] = '__globals["datas"]["%s"]["%s"]' % (symbols[0], field)
-                    to_inject[k] = temp
-                    #TODO支持多品种事件             
-                    events[k] = get_data_event(symbols)
+                        temp[field] = '__globals["datas"]["%s"]["%s"]["%s"]' % (symbols[0], time_frame, field)
+                    to_inject[key] = temp
+                    self.listeners[key] = SymbolsListener(self.engine, symbols, time_frame)
                 else:
                     #TODO自定义事件处理
                     pass
         injector = LocalsInjector(to_inject)
         ast_ = ast.parse(code)
         injector.visit(ast_)
-        exec(compile(ast_,'<string>',mode='exec'), self.__locals_+[], locals_)
-        for key, event in events():
-             self.event_handlers[key] = locals_[key]()
-             self.engine.register_event(event,self.event_handlers[key].__next__)
+        exec(compile(ast_,'<string>',mode='exec'), globals_, locals_)
+        for key in to_inject.keys():
+             self.listeners[key].set_generator(locals_[key])
         print("<%s>信号添加成功" % self.name)
         return(True)
-    
     #----------------------------------------------------------------------
     def onTick(self, tick):
         """行情更新"""
@@ -140,14 +128,8 @@ class Strategy:
     #----------------------------------------------------------------------
     def onBar(self, bar):
         """K线数据更新"""
-        self.listOpen.append(bar.open)
-        self.listHigh.append(bar.high)
-        self.listLow.append(bar.low)
-        self.listClose.append(bar.close)
-        self.listVolume.append(bar.volume)        
-        self.listTime.append(bar.time)
-        next(self.onBarGeneratorInstance)
-
+        pass
+    
     #----------------------------------------------------------------------
     def start(self):
         """
@@ -156,6 +138,8 @@ class Strategy:
         有需要可以重新实现更复杂的操作
         """
         self.trading = True
+        for listener in self.listeners.values():
+            listener.start()
         self.engine.writeLog(self.name + u'开始运行')
         
     #----------------------------------------------------------------------
@@ -165,8 +149,8 @@ class Strategy:
         同上
         """
         self.trading = False
-        for handler in self.event_handlers.values():
-            handler.close()
+        for listener in self.listeners.values():
+            listener.stop()
         self.engine.writeLog(self.name + u'停止运行')
         
     #----------------------------------------------------------------------

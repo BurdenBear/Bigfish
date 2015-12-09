@@ -8,10 +8,11 @@ Created on Wed Nov 25 21:09:47 2015
 import time
 
 #自定义模块
-from Bigfish.event.eventEngine.eventType import *
-from Bigfish.utils.quote import Tick, Bar
+from Bigfish.event.event import *
+from Bigfish.event.engine import EventEngine
 from Bigfish.utils.trade import *
 from Bigfish.utils.common import deque
+from functools import partial
 
 #%% 策略引擎语句块
 ########################################################################
@@ -19,9 +20,9 @@ class StrategyEngine(object):
     """策略引擎"""
     CACHE_MAXLEN = 10000
     #----------------------------------------------------------------------
-    def __init__(self, eventEngine, backtesting = False):
+    def __init__(self, event_engine=EventEngine(), backtesting = False):
         """Constructor"""
-        self.__eventEngine = eventEngine # 事件处理引擎
+        self.__event_engine = event_engine # 事件处理引擎
         self.__backtesting = backtesting # 是否为回测  
         self.__orders_done = {} # 保存所有已处理报单数据的字典
         self.__orders_todo = {} # 保存所有未处理报单（即挂单）数据的字典
@@ -30,13 +31,23 @@ class StrategyEngine(object):
         self.__strategys = {} # 保存策略对象的字典,key为策略名称,value为策略对象        
         self.__datas = {} # 统一的数据视图
         self.__symbols = {} # 数据中所包含的交易物品种及各自存储的长度        
+        self.start_time = None
+        self.end_time = None        
         self.__map_symbol_position = {} # 保存交易物代码和有效仓位对应映射关系的字典
-        # 保存策略将使用到的与某标的物有关事件
-        # key为标的物代码
-        # value为标的物数据更新有关的事件
-        self.__eventType = {}
+    #TODO单独放入utils中
+    def get_attr(self, attr=''):
+        return(getattr(self,'_%s__%s'%(self.__class__.__name__,attr)))
+    def set_attr(self, value, attr='', check=lambda x:None, handle=None):
+        after_check = check(value)
+        if not after_check:
+            setattr(self,'_%s__%s'%(self.__class__.__name__,attr),value)
+        elif handle:
+            setattr(self,'_%s__%s'%(self.__class__.__name__,attr),handle(check))
+    symbols = property(partial(get_attr,attr='symbols'), None, None)
+    start_time = property(partial(get_attr,attr='start_time'), partial(set_attr,attr='start_time'),None)
+    end_time = property(partial(get_attr,attr='end_time'), partial(set_attr,attr='end_time'),None)
     #----------------------------------------------------------------------
-    def get_currentcontracts():
+    def get_currentcontracts(self):
         #TODO 现在持仓手数        
         return()
     #----------------------------------------------------------------------
@@ -47,32 +58,30 @@ class StrategyEngine(object):
     def get_datas(self):
         return(self.__datas)
     #----------------------------------------------------------------------
-    def add_symbols(self, symbols, max_length = 0):
+    def add_symbols(self, symbols, time_frame, max_length = 0):
         for symbol in symbols:
-            if symbol not in self.__symbols:
-                self.__symbols[symbol] = 0
-            if max_length > self.__symbols[symbol]:
-                self.__symbols[symbol] = max_length
+            if (symbol,time_frame) not in self.__symbols:
+                self.__symbols[(symbol,time_frame)] = max_length
+            self.__symbols[(symbol,time_frame)] = max(max_length, self.__symbols[(symbol,time_frame)])
+            self.register_event(EVENT_BAR_SYMBOL[symbol][time_frame],self.update_bar_data)
     #----------------------------------------------------------------------
     def initialize(self):
-        #TODO数据结构还需修改        
-        for symbol, maxlen in symbols.items():
-            if maxlen == 0:
-                self.__datas=deque([],maxlen=self.CACHE_MAXLEN)
-            else:
-                self.__datas=deque([],maxlen=maxlen)
-        self.__eventEngine.register(EVENT_BARDATA,self.update_bar_data)
-        self.__eventEngine.register(EVENT_MARKETDATA, self.update_market_data)
-        self.__eventEngine.register(EVENT_ORDER, self.update_order)
-        self.__eventEngine.register(EVENT_DEAL ,self.update_deal)
-        
+        #TODO数据结构还需修改
+        for (symbol, time_frame), maxlen in self.__symbols.items():
+            for field in ['open','high','low','close','time','volume']:
+                if not symbol in self.__datas:
+                    self.__datas[symbol] = {}
+                if not time_frame in self.__datas[symbol]:
+                    self.__datas[symbol][time_frame] = {}
+                if maxlen == 0:
+                    maxlen = self.CACHE_MAXLEN
+                for field in ['open','high','low','close','time','volume']:
+                    self.__datas[symbol][time_frame][field] = deque(maxlen=maxlen)
     #----------------------------------------------------------------------
-    def addStrategy(self,strategy):
+    def add_strategy(self,strategy):
         """添加已创建的策略实例"""
         self.__strategys[strategy.get_id()] = strategy
-        strategy.engine = self
-        self.registerStrategy(strategy.symbols, strategy)
-        
+        strategy.engine = self    
     #----------------------------------------------------------------------
     def update_market_data(self, event):
         """行情更新"""       
@@ -80,12 +89,15 @@ class StrategyEngine(object):
         pass
     #----------------------------------------------------------------------
     def update_bar_data(self,event):
-        pass    
+        bar = event.content['data']
+        symbol = bar.symbol
+        time_frame = bar.time_frame
+        for field in ['open','high','low','close','time','volume']:
+            self.__datas[symbol][time_frame][field].appendleft(getattr(bar,field))
     #----------------------------------------------------------------------
     def __process_order(self, tick):
         """处理停止单"""
         pass
-
     #----------------------------------------------------------------------
     def update_order(self, event):
         """报单更新"""
@@ -193,35 +205,46 @@ class StrategyEngine(object):
             if order_id in self.__orders_todo:
                 del(self.__orders_todo[order_id])
     #----------------------------------------------------------------------
-    def register_event(self, event, handle):
+    def put_event(self, event):
+        #TODO 加入验证
+        self.__event_engine.put(event)
+    #----------------------------------------------------------------------   
+    def register_event(self, event_type, handle):
         """注册事件监听"""
         #TODO  加入验证
-        self.__eventEngine.register(event, handle)
+        self.__event_engine.register(event_type, handle)
+    def unregister_event(self, event_type, handle):
+        self.__event_engine.unregister(event_type, handle)
     #----------------------------------------------------------------------
     def writeLog(self, log):
         """写日志"""
         event = Event(type_=EVENT_LOG)
-        event.dict_['log'] = log
-        self.__eventEngine.put(event)
+        event.content['log'] = log
+        self.__event_engine.put(event)
     #----------------------------------------------------------------------
-    def start_all(self):
+    def start(self):
         """启动所有策略"""
+        self.__event_engine.start()
         for strategy in self.__strategys.values():
             strategy.start()         
     #----------------------------------------------------------------------
-    def stop_all(self):
+    def stop(self):
         """停止所有策略"""
+        self.__event_engine.stop()        
         for strategy in self.__strategys.values():
-            strategy.stop()
+            strategy.stop()        
     #TODO 对限价单的支持    
     #----------------------------------------------------------------------
     def sell(symbol, volume, price=None, stop=False ,limit=False, strategy=None):
-        order = Order(symbol, ORDER_TYPE_SELL, strategy)
         position = self.__map_symbol_position[symbol]
         if position:
             if position.type <= 0:
                 return#XXX可能的返回值
+        order = Order(symbol, ORDER_TYPE_SELL, strategy)
         order.volume_initial = volume
+        time_ = self.__datas[symbol][time_frame]['time']
+        order.time_setup = int(time_)
+        order.time_setup_msc = int((time_ - int(time_))*(10**6))
         self.send_order(order)
     #----------------------------------------------------------------------
     def buy(symbol, volume, price=None, stop=False, limit=False, strategy=None):

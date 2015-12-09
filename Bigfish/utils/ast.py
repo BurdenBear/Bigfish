@@ -19,7 +19,7 @@ class LocalsInjector(ast.NodeVisitor):
         visitor = getattr(self, method, self.generic_visit)
         visitor(node)
         self.__depth -= 1
-        print("<deep>:<%d>" % self.__depth, node)
+        #print("<deep>:<%d>" % self.__depth, node)
         if self.__depth == 0:
             ast.fix_missing_locations(node)
 

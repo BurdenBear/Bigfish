@@ -4,28 +4,27 @@ Created on Thu Nov 26 10:06:21 2015
 
 @author: BurdenBear
 """
-
+from Bigfish.utils.common import DictLike
 ########################################################################
-class Bar:
+class Bar(DictLike):
     """K线数据对象（开高低收成交量时间）"""
-    __slots__ = ["symbol", "openPrice", "highPrice", "lowPrice", "closePrice", "volume", "ctime","time_frame"]   
+    __slots__ = ["symbol", "time_frame", "open", "high", "low", "close", "volume", "time"]   
     def __init__(self,symbol):
         self.symbol = symbol
-        self.openPrice = 0
-        self.highPrice = 0
-        self.lowPrice = 0
-        self.closePrice = 0
+        self.time_frame = 0        
+        self.open = 0
+        self.high = 0
+        self.low = 0
+        self.close = 0
         self.volume = 0
-        self.ctime = 0
-        self.time_frame = 0
-
+        self.time = 0
 ########################################################################
 
 class Tick:
     """Tick数据对象"""
     __DEPTH = 5    
     __slots__ = ["symbol", "openPrice", "highPrice" , "lowPrice", "lastPrice", "volume", "openInterest",
-                 "upperLimit", "lowerLimit", "ctime", "ms" ]    
+                 "upperLimit", "lowerLimit", "time", "time_msc" ]    
     __slots__.extend(["bidPrice%s"%(x+1) for x in range(__DEPTH)])
     __slots__.extend(["bidVolume%s"%(x+1) for x in range(__DEPTH)])
     __slots__.extend(["askPrice%s"%(x+1) for x in range(__DEPTH)])
@@ -50,8 +49,8 @@ class Tick:
         self.upperLimit = 0         # 涨停价
         self.lowerLimit = 0         # 跌停价
         
-        self.ctime = 0              # 更新时间和毫秒
-        self.ms= 0
+        self.time = 0              # 更新时间和毫秒
+        self.time_msc= 0
         
         # 深度行情
         #TODO 用反射比正常访问慢一倍，以后再设法优化吧

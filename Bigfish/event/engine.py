@@ -1,14 +1,11 @@
-# encoding: UTF-8
+# -*- coding: utf-8 -*-
 
 # 系统模块
 from queue import Queue, Empty
 from threading import Thread
 
-# 第三方模块
-#from PyQt4.QtCore import QTimer
-
-# 自己开发的模块
-from .eventType import *
+# 自定义模块
+from Bigfish.event.event import EVENT_TIMER, Event
 
 
 ########################################################################
@@ -62,13 +59,12 @@ class EventEngine:
         self.__thread = Thread(target = self.__run)
         
         # 计时器，用于触发计时器事件
-        self.__timer = QTimer()
-        self.__timer.timeout.connect(self.__onTimer)
+        #self.__timer = QTimer()
+        #self.__timer.timeout.connect(self.__onTimer)
         
         # 这里的__handlers是一个字典，用来保存对应的事件调用关系
         # 其中每个键对应的值是一个列表，列表中保存了对该事件进行监听的函数功能
         self.__handlers = {}
-        
     #----------------------------------------------------------------------
     def __run(self):
         """引擎运行"""
@@ -110,17 +106,14 @@ class EventEngine:
         self.__thread.start()
         
         # 启动计时器，计时器事件间隔默认设定为1秒
-        self.__timer.start(1000)
+        #self.__timer.start(1000)
     
     #----------------------------------------------------------------------
     def stop(self):
         """停止引擎"""
         # 将引擎设为停止
         self.__active = False
-        
-        # 停止计时器
-        self.__timer.stop()
-        
+              
         # 等待事件处理线程退出
         self.__thread.join()
             
@@ -153,44 +146,16 @@ class EventEngine:
             if not handlerList:
                 del self.__handlers[type_]
         except KeyError:
-            pass     
-        
+            pass             
+
     #----------------------------------------------------------------------
     def put(self, event):
         """向事件队列中存入事件"""
         self.__queue.put(event)
-
-
-########################################################################
-class Event:
-    """事件对象"""
-
-    #----------------------------------------------------------------------
-    def __init__(self, type_=None):
-        """Constructor"""
-        self.type_ = type_      # 事件类型
-        self.dict_ = {}         # 字典用于保存具体的事件数据
-
-
+        
 #----------------------------------------------------------------------
 def test():
     """测试函数"""
-    import sys
-    from datetime import datetime
-    '''
-    from PyQt4.QtCore import QCoreApplication
-    
-    def simpletest(event):
-        print (u'处理每秒触发的计时器事件：%s' % str(datetime.now()))
-    
-    app = QCoreApplication(sys.argv)
-    
-    ee = EventEngine()
-    ee.register(EVENT_TIMER, simpletest)
-    ee.start()
-    
-    app.exec_()
-    '''
     
 # 直接运行脚本可以进行测试
 if __name__ == '__main__':
