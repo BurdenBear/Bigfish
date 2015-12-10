@@ -5,9 +5,8 @@ from queue import Queue, Empty
 from threading import Thread
 
 # 自定义模块
-from Bigfish.event.event import EVENT_TIMER, Event
-
-
+from Bigfish.event.event import EVENT_TIMER, EVENT_ASYNC, Event
+from functools import wraps,partial
 ########################################################################
 class EventEngine:
     """
@@ -65,6 +64,8 @@ class EventEngine:
         # 这里的__handlers是一个字典，用来保存对应的事件调用关系
         # 其中每个键对应的值是一个列表，列表中保存了对该事件进行监听的函数功能
         self.__handlers = {}
+        # 注册异步事件
+        self.register(EVENT_ASYNC,lambda event:event.content['func']())
     #----------------------------------------------------------------------
     def __run(self):
         """引擎运行"""
@@ -101,10 +102,8 @@ class EventEngine:
         """引擎启动"""
         # 将引擎设为启动
         self.__active = True
-        
         # 启动事件处理线程
         self.__thread.start()
-        
         # 启动计时器，计时器事件间隔默认设定为1秒
         #self.__timer.start(1000)
     
@@ -152,8 +151,16 @@ class EventEngine:
     def put(self, event):
         """向事件队列中存入事件"""
         self.__queue.put(event)
-        
-#----------------------------------------------------------------------
+
+    def async_handle(self,func,callback):
+        @wraps(func)        
+        def wrapper(*args, **kwargs):
+            args,kwargs = func(*args,**kwargs)
+            event = Event(EVENT_ASYNC,{'func':partial(callback,*args,**kwargs)})
+            self.engine.put(event)
+        thread = Thread(target=wrapper)
+        thread.start()
+
 def test():
     """测试函数"""
     

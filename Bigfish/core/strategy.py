@@ -32,14 +32,14 @@ class Strategy(HasID):
         #在字典中保存Open,High,Low,Close,Volumn，CurrentBar，MarketPosition，
         #手动为exec语句提供local命名空间
         self.__locals_ = {
-                    'sell':partial(self.engine.sell, strategy = self.__id),
-                    'short':partial(self.engine.short, strategy = self.__id),
-                    'buy':partial(self.engine.buy, strategy = self.__id),
-                    'cover':partial(self.engine.cover, strategy = self.__id),
-                    'marketposition':self.engine.get_positions(),
-                    'currentcontracts':self.engine.get_currentcontracts(),
-                    'datas':self.engine.get_datas(),
-                    'context':self.__context
+                    "sell":partial(self.engine.sell, strategy = self.__id),
+                    "short":partial(self.engine.short, strategy = self.__id),
+                    "buy":partial(self.engine.buy, strategy = self.__id),
+                    "cover":partial(self.engine.cover, strategy = self.__id),
+                    "marketposition":self.engine.get_positions(),
+                    "currentcontracts":self.engine.get_currentcontracts(),
+                    "datas":self.engine.get_datas(),
+                    "context":self.__context
                    }
         #将策略容器与对应代码文件关联   
         self.bind_code_to_strategy(code)
@@ -76,7 +76,8 @@ class Strategy(HasID):
         self.engine.end_time = self.end_time
         check_time_frame(self.time_frame)
         to_inject = {}
-        temp = {key:'__globals["%s"]' % key for key in self.__locals_.keys()}
+        temp = {key:"__globals['%s']" % key for key in self.__locals_.keys()
+                if key not in ['sell','buy','short','cover']}
         for key , value in locals_.items():
             if inspect.isfunction(value):
                 paras = inspect.signature(value).parameters
@@ -87,23 +88,22 @@ class Strategy(HasID):
                 if not custom:
                     #TODO加入真正的验证方法
                     symbols = get_parameter_default(paras, "symbols", lambda x:True, self.symbols)                   
-                    time_frame = get_parameter_default(paras, "timeframe", lambda x:True, self.time_frame)
-                    max_length = get_parameter_default(paras, "maxlen", lambda x: isinstance(int)and(x>0), 0)                    
-                    check_time_frame(time_frame)                 
-                    self.engine.add_symbols(symbols,time_frame,max_length)                
-                    #XXX 是否有封装的必要
-                    #self.event_handlers[k] = BarEventHandle(self.engine, symbols[0])
-                    for field in ["open","high","low","close","time","volume"]:
-                        temp[field] = '__globals["datas"]["%s"]["%s"]["%s"]' % (symbols[0], time_frame, field)
-                    to_inject[key] = temp
+                    time_frame = get_parameter_default(paras, "timeframe", check_time_frame, self.time_frame)
+                    max_length = get_parameter_default(paras, "maxlen", lambda x: isinstance(int)and(x>0), 0)                                    
+                    self.engine.add_symbols(symbols,time_frame,max_length)
                     self.listeners[key] = SymbolsListener(self.engine, symbols, time_frame)
+                    for field in ["open","high","low","close","time","volume"]:
+                        temp[field] = "__globals['datas']['%s']['%s']['%s']" % (symbols[0], time_frame, field)
+                    for field in ["buy","short","sell","cover"]:
+                        temp[field] = "functools.partial(__globals['%s'],listener=%d)" % (field,self.listeners[key].get_id())
+                    to_inject[key] = temp
                 else:
                     #TODO自定义事件处理
                     pass
         injector = LocalsInjector(to_inject)
         ast_ = ast.parse(code)
         injector.visit(ast_)
-        exec(compile(ast_,'<string>',mode='exec'), globals_, locals_)
+        exec(compile(ast_,"<string>",mode="exec"), globals_, locals_)
         for key in to_inject.keys():
              self.listeners[key].set_generator(locals_[key])
         print("<%s>信号添加成功" % self.name)

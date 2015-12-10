@@ -17,6 +17,7 @@ _TIME_FRAME_PERIOD ={'1W':604800,'1D':86400,'1H':3600,'30M':1800,'15M':900,'10M'
 def check_time_frame(time_frame):
     if not time_frame in _TIME_FRAME.keys():
         raise(ValueError("不合法的time_frame值"))
+    return True
 def get_time_frame_bit(time_frame):
     check_time_frame(time_frame)
     return(1 << _TIME_FRAME[time_frame])
@@ -93,20 +94,25 @@ class HasID:
     def set_auto_inc(cls, num):
         cls.__AUTO_INC_NEXT = num
 ###################################################################
+class Deque(deque):
+    pass
+    #让deque支持切片操作
+        
+###################################################################        
 class SeriesList(UserList):
     __MAX_LENGTH = 10000    
-    def __init__(self, initlist=None, max_length=None):
-        self.max_length = None
-        if max_length:
-            if isinstance(max_length, int):
-                if max_length > 0:
-                    self.max_length = max_length
+    def __init__(self, initlist=None, maxlen=None):
+        self.maxlen = None
+        if maxlen:
+            if isinstance(maxlen, int):
+                if maxlen > 0:
+                    self.maxlen = maxlen
         else:
-            self.max_length = self.__class__.__MAX_LENGTH
+            self.maxlen = self.__class__.__MAX_LENGTH
         if not self.max_length:
             raise (ValueError("参数max_length的值不合法"))        
         if len(initlist) > self.max_length:
-            super().__init__(list(reversed(initlist[-max_length:])))
+            super().__init__(list(reversed(initlist[-maxlen:])))
         else:
             super().__init__(list(reversed(initlist)))
         self.last = len(self.data)

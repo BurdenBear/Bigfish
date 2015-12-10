@@ -33,6 +33,7 @@ class DataGenerator:
         
     def __insert_datas(self, symbol, time_frame):
         self.__data_events.extend(self.__get_datas(symbol, time_frame))
+        
     def start(self):
         self.__get_datas = partial(self._get_datas,start_time=self.__engine.start_time,end_time=self.__engine.end_time)
         for symbol, time_frame in self.__engine.symbols.keys():

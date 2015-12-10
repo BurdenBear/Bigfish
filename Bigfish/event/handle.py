@@ -33,7 +33,8 @@ class TickEventHandle():
     #TODO    
     pass
 #-----------------------------------------------------------------------
-class SymbolsListener(EventHandle, HasID):
+class SymbolsListener(HasID):
+    __SymbolsListeners = {}
     def __init__(self, engine, symbols, time_frame):
         self.__id = self.next_auto_inc()
         self.__symbols = {item:n for n,item in enumerate(symbols)}
@@ -43,8 +44,15 @@ class SymbolsListener(EventHandle, HasID):
         self.__generator = None
         self.__gene_istance = None
         self.__handler = self.__handle()
+        self.__SymbolsListeners[self.__id] = self
     def get_id(self):
         return(self.__id)
+    def get_time_frame(self):
+        return(self.__get_time_frame)
+    @classmethod
+    def get_by_id(cls, id_):
+        return(cls.__SymbolsListeners[id_])
+        
     def set_generator(self, generator):
         self.__generator = generator
     def start(self):
@@ -69,6 +77,6 @@ class SymbolsListener(EventHandle, HasID):
             bar = event.content["data"]
             bits_now |= 1 << self.__symbols[bar.symbol]
             if bits_now == bits_ready:
-                self.__gene_istance.__next__()
+                self.__gene_istance.__next__()         
                 bits_now = 0
     

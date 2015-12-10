@@ -28,7 +28,7 @@ class Event:
         #TODO check name        
         if name in [type_.name for type_ in cls.__types.values()]:
             #TODO 自定义错误
-            raise(KeyError)
+            raise(ValueError("重复的事件定义"))
         else:
             event_type = _EventType(name)
             cls.__types[event_type.get_id()] = event_type
@@ -39,7 +39,8 @@ class Event:
         """Constructor"""
         self.type_ = type_ # 事件类型
         self.content = content # 保存具体的事件数据
-########################################################################
+
+EVENT_ASYNC = Event._create_event_type('Async').get_id() # 用于实现异步
 EVENT_TIMER = Event._create_event_type('Timer').get_id() # 计时器事件，每隔1秒发送一次
 EVENT_LOG = Event._create_event_type('Log').get_id() # 日志事件，通常使用某个监听函数直接显示
 EVENT_TDLOGIN = Event._create_event_type('TdLogin').get_id() # 交易服务器登录成功事件

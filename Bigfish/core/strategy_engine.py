@@ -12,6 +12,7 @@ from Bigfish.event.event import *
 from Bigfish.event.engine import EventEngine
 from Bigfish.utils.trade import *
 from Bigfish.utils.common import deque
+from Bigfish.event.handle import SymbolsListener
 from functools import partial
 
 #%% 策略引擎语句块
@@ -165,7 +166,7 @@ class StrategyEngine(object):
             #TODO加入手续费等
             order.deal = deal.get_id()
             deal.order = order.get_id()
-            self.__update_position(self, deal)
+            return(deal)
             #TODO 市价单成交
         else:
             pass
@@ -183,12 +184,8 @@ class StrategyEngine(object):
         """
         #TODO 更多属性的处理
         if self.check_order(order):
-            time_now = time.time()
-            order.time_setup = int(time_now)
-            order.time_setup_msc = int((time_now-int(time_now))*(10**6))
             if order.type <= 1:#market order                        
-                self.__send_order_to_broker(order)
-                self.__orders_done[order.get_id()] = order 
+                self.__engine.async_handle(self.__send_order_to_broker(order),self.__update_position())
             else:
                 self.__orders_todo[order.get_id()] = order
             return(True)
@@ -235,43 +232,64 @@ class StrategyEngine(object):
             strategy.stop()        
     #TODO 对限价单的支持    
     #----------------------------------------------------------------------
-    def sell(symbol, volume, price=None, stop=False ,limit=False, strategy=None):
-        position = self.__map_symbol_position[symbol]
-        if position:
-            if position.type <= 0:
-                return#XXX可能的返回值
+    def sell(symbol, volume=1, price=None, stop=False ,limit=False, strategy=None, listner=None):
+        if volume == 0: return        
+        position = self.__map_symbol_position.get(symbol,None)
+        if not position or position.type <= 0:
+            return#XXX可能的返回值
         order = Order(symbol, ORDER_TYPE_SELL, strategy)
         order.volume_initial = volume
-        time_ = self.__datas[symbol][time_frame]['time']
+        if self.__backtesting:
+            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listner).get_time_frame()]['time']
+        else:
+            time_ = time.time()
         order.time_setup = int(time_)
         order.time_setup_msc = int((time_ - int(time_))*(10**6))
-        self.send_order(order)
-    #----------------------------------------------------------------------
-    def buy(symbol, volume, price=None, stop=False, limit=False, strategy=None):
-        order = Order(symbol, ORDER_TYPE_BUY, strategy)
-        position = self.__map_symbol_position[symbol]
-        if position:
-            if position.type < 0:
-                order.volume_initial = volume + position.volume
-                return(self.send_order(order))  
-        order.volume_initial = volume
         return(self.send_order(order))
     #----------------------------------------------------------------------
-    def cover(symbol, volume, price=None, stop=False, limit=False, strategy=None):
+    def buy(symbol, volume=1, price=None, stop=False, limit=False, strategy=None, listner=None):
+        if volume == 0: return
+        position = self.__map_symbol_position.get(symbol,None)        
         order = Order(symbol, ORDER_TYPE_BUY, strategy)
-        position = self.__map_symbol_position[symbol]
-        if position:
-            if position.type >= 0:
-                return#XXX可能的返回值
-        order.volume_initial = volume
+        if position and position.type < 0:
+            order.volume_initial = volume + position.volume
+        else:
+            order.volume_initial = volume
+        if self.__backtesting:
+            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listner).get_time_frame()]['time']
+        else:
+            time_ = time.time()
+        order.time_setup = int(time_)
+        order.time_setup_msc = int((time_ - int(time_))*(10**6))
         return(self.send_order(order))
     #----------------------------------------------------------------------
-    def short(symbol, volume, price=None, stop=False, limit=False, strategy=None):
+    def cover(symbol, volume=1, price=None, stop=False, limit=False, strategy=None, listner=None):
+        if volume == 0: return        
+        position = self.__map_symbol_position.get(symbol,None)        
+        order = Order(symbol, ORDER_TYPE_BUY, strategy)
+        if not position or position.type >= 0:
+            return#XXX可能的返回值
+        order.volume_initial = volume
+        if self.__backtesting:
+            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listner).get_time_frame()]['time']
+        else:
+            time_ = time.time()
+        order.time_setup = int(time_)
+        order.time_setup_msc = int((time_ - int(time_))*(10**6))
+        return(self.send_order(order))
+    #----------------------------------------------------------------------
+    def short(symbol, volume=1, price=None, stop=False, limit=False, strategy=None, listner=None):
+        if volume == 0: return        
+        position = self.__map_symbol_position.get(symbol,None)        
         order = Order(symbol, ORDER_TYPE_SELL, strategy)        
-        position = self.__map_symbol_position[symbol]
-        if position:
-            if position.type > 0:
-                order.volume_initial = volume + position.volume
-                return(self.send_order(order))
-        order.volume_initial = volume
+        if position and position.type > 0:
+            order.volume_initial = volume + position.volume
+        else:
+            order.volume_initial = volume
+        if self.__backtesting:
+            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listner).get_time_frame()]['time']
+        else:
+            time_ = time.time()
+        order.time_setup = int(time_)
+        order.time_setup_msc = int((time_ - int(time_))*(10**6))
         return(self.send_order(order))
