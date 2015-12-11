@@ -15,11 +15,12 @@ POSITION_TYPE_SELL = -1
 class Position(HasID, DictLike):
     """仓位对象"""
     
-    __slots__ = ["symbol", "deal", "__id", "time_open", "time_open_msc", "time_update", "time_update_msc",
-                 "type", "volume", "price_open", "price_current", "price_profit", "strategy" ]
+    __slots__ = ["symbol", "deal", "__id", "prev_id", "next_id", "time_open", "time_open_msc", "time_update", "time_update_msc",
+                 "type", "volume", "price_open", "price_current", "price_profit", "strategy", "handle"]
 
-    def __init__(self, symbol=None):
+    def __init__(self, symbol=None, strategy=None, handle=None):
         self.symbol = symbol
+        self.deal = None
         self.__id = self.next_auto_inc()
         self.prev_id = None
         self.next_id = None
@@ -27,15 +28,22 @@ class Position(HasID, DictLike):
         self.time_open_msc = None
         self.time_update = None
         self.time_update_msc = None
-        self.type = None
-        self.volume = None
-        self.price_open = None
-        self.price_current = None
+        self.type = 0
+        self.volume = 0
+        self.price_open = 0
+        self.price_current = 0
         self.price_profit = None
-        self.strategy = None
+        self.strategy = strategy
+        self.handle = handle
         
-    def get_id(self): 
-        return(self.__id)
+    def __ne__(self, x):    return(self.type.__ne__(x))
+    def __eq__(self, x):    return(self.type.__eq__(x))
+    def __le__(self, x):    return(self.type.__le__(x))
+    def __lt__(self, x):    return(self.type.__lt__(x))
+    def __gt__(self, x):    return(self.type.__gt__(x))
+    def __ge__(self, x):    return(self.type.__ge__(x))
+        
+    def get_id(self):    return(self.__id)
 
 #ENUM_ORDER_STATE
 ORDER_STATE_STARTED = 0 # Order checked, but not yet accepted by broker
@@ -76,9 +84,9 @@ class Order(HasID, DictLike):
                  "time_setup_msc", "time_expiration_msc", "time_done_msc",
                  "type", "state", "type_filling", "type_life", "volume_initial",
                  "volume_current", "price_open", "price_stop_limit", "stop_loss", 
-                 "take_profit", "strategy"]
+                 "take_profit", "strategy", "handle"]
     
-    def __init__(self, symbol=None, type_=None, strategy=None):
+    def __init__(self, symbol=None, type_=None, strategy=None, handle=None):
         self.symbol = symbol
         self.deal = None
         self.__id = self.next_auto_inc()
@@ -99,9 +107,9 @@ class Order(HasID, DictLike):
         self.stop_loss = 0
         self.take_profit = 0
         self.strategy = strategy
+        self.handle = handle
         
-    def get_id(self):
-        return(self.__id)
+    def get_id(self):    return(self.__id)
        
 #ENUM_DEAL_TYPE      
 DEAL_TYPE_BUY = 1
@@ -113,10 +121,10 @@ DEAL_ENTRY_INOUT = -1 # Reverse
 
 class Deal(HasID):
     """成交对象"""
-    __slots__ = ["symbol", "__id", "order", "position", "time", "time_msc", "type", 
-                 "volume", "price", "commission", "profit", "strategy"]
+    __slots__ = ["symbol", "__id", "order", "position", "time", "time_msc", "type",
+                 "volume", "price", "commission", "profit", "strategy", "handle"]
                  
-    def __init__ (self, symbol=None):
+    def __init__ (self, symbol=None, strategy=None, handle=None):
         self.symbol = symbol
         self.__id = self.next_auto_inc()
         self.order = None
@@ -128,6 +136,7 @@ class Deal(HasID):
         self.price = 0
         self.commission = 0
         self.profit = 0
-        self.strategy = 0
-    def get_id(self):
-        return(self.__id)
+        self.strategy = strategy
+        self.handle = handle
+        
+    def get_id(self):    return(self.__id)

@@ -10,6 +10,19 @@ from datetime import datetime
 import re
 
 ###################################################################
+#通用的属性（property）封装方法，通过反射比直接在类中写特殊的方法慢4~5倍，适用于非内部循环变量
+def get_attr(self, attr=''):
+    return(getattr(self,'_%s__%s'%(self.__class__.__name__,attr)))
+    
+def set_attr(self, value, attr='', check=lambda x:None, handle=None):
+    after_check = check(value)
+    if not after_check:
+        setattr(self,'_%s__%s'%(self.__class__.__name__,attr),value)
+    elif handle:
+        setattr(self,'_%s__%s'%(self.__class__.__name__,attr),handle(check))
+    else:
+        setattr(self,'_%s__%s'%(self.__class__.__name__,attr),after_check)
+###################################################################
 _TIME_FRAME = {item:n for n, item in
                enumerate(['1W','1D','1H','30M','15M','10M','5M','1M'])}
 _TIME_FRAME_PERIOD ={'1W':604800,'1D':86400,'1H':3600,'30M':1800,'15M':900,'10M':600,'5M':300,'1M':60}

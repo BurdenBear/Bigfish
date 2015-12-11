@@ -5,8 +5,10 @@ from queue import Queue, Empty
 from threading import Thread
 
 # 自定义模块
-from Bigfish.event.event import EVENT_TIMER, EVENT_ASYNC, Event
+from Bigfish.event.event import EVENT_TIMER, EVENT_ASYNC, Event 
 from functools import wraps,partial
+
+
 ########################################################################
 class EventEngine:
     """
@@ -82,11 +84,8 @@ class EventEngine:
         # 检查是否存在对该事件进行监听的处理函数
         if event.type_ in self.__handlers:
             # 若存在，则按顺序将事件传递给处理函数执行
-            [handler(event) for handler in self.__handlers[event.type_]]
-            
-            # 以上语句为Python列表解析方式的写法，对应的常规循环写法为：
-            #for handler in self.__handlers[event.type_]:
-                #handler(event)    
+            for handler in self.__handlers[event.type_]:
+                handler(event)
                
     #----------------------------------------------------------------------
     def __onTimer(self):
@@ -125,7 +124,7 @@ class EventEngine:
         except KeyError:
             handlerList = []
             self.__handlers[type_] = handlerList
-        
+        # 监听函数的优先级通过注册先后来实现
         # 若要注册的处理器不在该事件的处理器列表中，则注册该事件
         if handler not in handlerList:
             handlerList.append(handler)
@@ -151,19 +150,17 @@ class EventEngine:
     def put(self, event):
         """向事件队列中存入事件"""
         self.__queue.put(event)
-
-    def async_handle(self,func,callback):
+        
+########################################################################
+def async_handle(engine, callback):
+    def wrap_func(func):
         @wraps(func)        
         def wrapper(*args, **kwargs):
-            args,kwargs = func(*args,**kwargs)
-            event = Event(EVENT_ASYNC,{'func':partial(callback,*args,**kwargs)})
-            self.engine.put(event)
-        thread = Thread(target=wrapper)
-        thread.start()
-
-def test():
-    """测试函数"""
-    
-# 直接运行脚本可以进行测试
-if __name__ == '__main__':
-    test()
+            def target(*args, **kwargs):
+                result = func(*args,**kwargs)
+                event = Event(EVENT_ASYNC,{'func':partial(callback,*result[0],**result[1])})
+                engine.put(event)
+            thread = Thread(target=target, args=args, kwargs=kwargs)
+            thread.start()
+        return wrapper
+    return(wrap_func)

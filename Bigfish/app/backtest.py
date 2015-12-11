@@ -5,7 +5,7 @@ Created on Wed Nov 25 20:41:04 2015
 @author: BurdenBear
 """
 
-from Bigfish.core import DataGenerator, StrategyEngine, Strategy, AccountManager
+from Bigfish.core import DataGenerator, StrategyEngine, Strategy
 from Bigfish.event.event import EVENT_BAR_SYMBOL, Event
 from Bigfish.utils.quote import Bar
 from Bigfish.utils.common import get_datetime
@@ -35,13 +35,15 @@ class Backtesting:
         self.strategy_engine = StrategyEngine(backtesting=True)        
         self.strategy = Strategy(self.strategy_engine, id_, name, code)
         self.strategy_engine.add_strategy(self.strategy)
-        self.account_manager = AccountManager(self.strategy_engine)
         self.data_generator = DataGeneratorTushare(self.strategy_engine)
         self.strategy_engine.initialize()
     
     def start(self):
         self.strategy_engine.start()
         self.data_generator.start()
-
+        
+    def get_profit(self):
+        return(self.strategy_engine.get_profit())
+        
     def stop(self):
         self.strategy_engine.stop()

@@ -8,10 +8,11 @@ Created on Wed Nov 25 21:09:47 2015
 import time
 
 #自定义模块
+from Bigfish.core import AccountManager
 from Bigfish.event.event import *
-from Bigfish.event.engine import EventEngine
+from Bigfish.event.engine import EventEngine, async_handle
 from Bigfish.utils.trade import *
-from Bigfish.utils.common import deque
+from Bigfish.utils.common import set_attr, get_attr, deque
 from Bigfish.event.handle import SymbolsListener
 from functools import partial
 
@@ -21,29 +22,23 @@ class StrategyEngine(object):
     """策略引擎"""
     CACHE_MAXLEN = 10000
     #----------------------------------------------------------------------
-    def __init__(self, event_engine=EventEngine(), backtesting = False):
+    def __init__(self, event_engine=EventEngine(), account_manager=AccountManager(), backtesting=False):
         """Constructor"""
         self.__event_engine = event_engine # 事件处理引擎
+        self.__account_manager = account_manager #账户管理
         self.__backtesting = backtesting # 是否为回测  
         self.__orders_done = {} # 保存所有已处理报单数据的字典
         self.__orders_todo = {} # 保存所有未处理报单（即挂单）数据的字典
         self.__deals = {} # 保存所有成交数据的字典
-        self.__position = {} # 保存所有仓位信息的字典
+        self.__positions = {} # Key:id, value:position with responding id
         self.__strategys = {} # 保存策略对象的字典,key为策略名称,value为策略对象        
         self.__datas = {} # 统一的数据视图
         self.__symbols = {} # 数据中所包含的交易物品种及各自存储的长度        
         self.start_time = None
         self.end_time = None        
-        self.__map_symbol_position = {} # 保存交易物代码和有效仓位对应映射关系的字典
+        self.__current_positions = {} # key：symbol，value：current position
+        self.__initial_positions = {}# key：symbol，value：initial position
     #TODO单独放入utils中
-    def get_attr(self, attr=''):
-        return(getattr(self,'_%s__%s'%(self.__class__.__name__,attr)))
-    def set_attr(self, value, attr='', check=lambda x:None, handle=None):
-        after_check = check(value)
-        if not after_check:
-            setattr(self,'_%s__%s'%(self.__class__.__name__,attr),value)
-        elif handle:
-            setattr(self,'_%s__%s'%(self.__class__.__name__,attr),handle(check))
     symbols = property(partial(get_attr,attr='symbols'), None, None)
     start_time = property(partial(get_attr,attr='start_time'), partial(set_attr,attr='start_time'),None)
     end_time = property(partial(get_attr,attr='end_time'), partial(set_attr,attr='end_time'),None)
@@ -54,7 +49,7 @@ class StrategyEngine(object):
     #----------------------------------------------------------------------
     def get_positions(self):
         #TODO 读取每个品种的有效Position       
-        return(self.__map_symbol_position)
+        return(self.__current_positions)
     #----------------------------------------------------------------------
     def get_datas(self):
         return(self.__datas)
@@ -78,6 +73,11 @@ class StrategyEngine(object):
                     maxlen = self.CACHE_MAXLEN
                 for field in ['open','high','low','close','time','volume']:
                     self.__datas[symbol][time_frame][field] = deque(maxlen=maxlen)
+            if symbol not in self.__current_positions:
+                position = Position(symbol)
+                self.__current_positions[symbol] = position
+                self.__initial_positions[symbol] = position
+                self.__positions[position.get_id()] = position
     #----------------------------------------------------------------------
     def add_strategy(self,strategy):
         """添加已创建的策略实例"""
@@ -117,56 +117,85 @@ class StrategyEngine(object):
                 return(1)
             else:
                 return(-1)
-        position_prev = self.__map_symbol_position[deal.symbol]
-        position_now = Position(deal.symbol)
+        if deal.volume == 0:    return
+        position_prev = self.__current_positions[deal.symbol]
+        position_now = Position(deal.symbol, deal.strategy, deal.handle)
         position_now.prev_id = position_prev.get_id()
         position_prev.next_id = position_now.get_id()
         position = position_prev.type
         #XXX常量定义改变这里的映射函数也可能改变
         if deal.type * position >= 0:
-            if position == 0:
+            if position == 0: #open position
                 position_now.price_open = deal.price
                 position_now.time_open = deal.time
                 position_now.time_open_msc = deal.time_msc
+            else: #overweight position
+                position_now.time_open = position_prev.time_open
+                position_now.time_open_msc = position_prev.time_open_msc
             position_now.volume = deal.volume + position_prev.volume
-            position_now.type = position
+            position_now.type = deal.type
             position_now.price_current = (position_prev.price_current*position_prev.volume
             +deal.price*deal.volume)/position_now.volume 
         else:
             contracts = position_prev.volume - deal.volume
-            position_now.volume = abs(constracts)
-            position_now.price_current = (position_prev.price_current*position_prev.volume
-            -deal.price*deal.volume)/(position_prev.volume-deal.volume)
+            position_now.volume = abs(contracts)
             position_now.type = position * sign(contracts)
+            if position_now.type == 0: #close position
+                deal.profit = (deal.price-position_prev.price_current)*position*position_prev.volume              
+                position_now.price_current = 0
+                position_now.volume = 0 #防止浮点数精度可能引起的问题
+                position_now.time_open = position_prev.time_open
+                position_now.time_open_msc = position_prev.time_open_msc
+            elif position_now != position: #reverse position
+                deal.profit = (deal.price-position_prev.price_current)*position*position_prev.volume
+                position_now.price_current = deal.price
+                position_now.time_open = deal.time
+                position_now.time_open_msc = deal.time_msc
+                position_now.price_open = price_now.price_current
+            else: #underweight position
+                #XXX 平部分仓位是直接计算入平仓收益还是将收益暂时算在浮动中              
+                position_now.price_current = (position_prev.price_current*position_prev.volume
+                -deal.price*deal.volume)/(position_prev.volume-deal.volume)
+                position_now.time_open = position_prev.time_open
+                position_now.time_open_msc = position_prev.time_open_msc
         position_now.time_update = deal.time
         position_now.time_update_msc = deal.time_msc
         deal.position = position_now.get_id()
         position_now.deal = deal.get_id()
-        self.__map_symbol_position[deal.symbol] = position_now
+        self.__current_positions[deal.symbol] = position_now
+        self.__positions[position_now.get_id()] = position_now
+        if deal.profit != 0:
+            self.__account_manager.update_deal(deal)
+    
+    def get_profit(self):
+        return(self.__account_manager.get_profit())
+
     #----------------------------------------------------------------------
+    @staticmethod
     def check_order(order):
-        if not isinstance(Order):
+        if not isinstance(order, Order):
             return(False)
         #TODO更多关于订单合法性的检查
         return(True)
     #----------------------------------------------------------------------
     def __send_order_to_broker(self,order):
         if self.__backtesting:
-            time_now = time.time()
-            order.time_done = int(time_now)
-            order.time_done_msc = int((time_now-int(time_now))*(10**6))
+            time_frame = SymbolsListener.get_by_id(order.handle).get_time_frame()
+            time_ = self.__datas[order.symbol][time_frame]["time"][0]
+            order.time_done = int(time_)
+            order.time_done_msc = int((time_-int(time_))*(10**6))
             order.volume_current = order.volume_initial
-            deal = Deal(order.symbol)
+            deal = Deal(order.symbol, order.strategy, order.handle)
             deal.time = order.time_done
             deal.time_msc = order.time_done_msc
             deal.volume = order.volume_initial
             deal.type = 1-((order.type&1)<<1)
-            deal.price = self.__datas[order.symbol]["close"][0]
+            deal.price = self.__datas[order.symbol][time_frame]["close"][0]
             deal.profit = deal.price*deal.type*deal.volume
             #TODO加入手续费等
             order.deal = deal.get_id()
             deal.order = order.get_id()
-            return(deal)
+            return([deal],{})
             #TODO 市价单成交
         else:
             pass
@@ -185,7 +214,10 @@ class StrategyEngine(object):
         #TODO 更多属性的处理
         if self.check_order(order):
             if order.type <= 1:#market order                        
-                self.__engine.async_handle(self.__send_order_to_broker(order),self.__update_position())
+                #send_order_to_broker = async_handle(self.__event_engine, self.__update_position)(self.__send_order_to_broker)
+                #send_order_to_broker(order)
+                result = self.__send_order_to_broker(order)
+                self.__update_position(*result[0])
             else:
                 self.__orders_todo[order.get_id()] = order
             return(True)
@@ -232,62 +264,62 @@ class StrategyEngine(object):
             strategy.stop()        
     #TODO 对限价单的支持    
     #----------------------------------------------------------------------
-    def sell(symbol, volume=1, price=None, stop=False ,limit=False, strategy=None, listner=None):
+    def sell(self, symbol, volume=1, price=None, stop=False ,limit=False, strategy=None, listener=None):
         if volume == 0: return        
-        position = self.__map_symbol_position.get(symbol,None)
+        position = self.__current_positions.get(symbol,None)
         if not position or position.type <= 0:
             return#XXX可能的返回值
-        order = Order(symbol, ORDER_TYPE_SELL, strategy)
+        order = Order(symbol, ORDER_TYPE_SELL, strategy, listener)
         order.volume_initial = volume
         if self.__backtesting:
-            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listner).get_time_frame()]['time']
+            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listener).get_time_frame()]['time'][0]
         else:
             time_ = time.time()
         order.time_setup = int(time_)
         order.time_setup_msc = int((time_ - int(time_))*(10**6))
         return(self.send_order(order))
     #----------------------------------------------------------------------
-    def buy(symbol, volume=1, price=None, stop=False, limit=False, strategy=None, listner=None):
+    def buy(self, symbol, volume=1, price=None, stop=False, limit=False, strategy=None, listener=None):
         if volume == 0: return
-        position = self.__map_symbol_position.get(symbol,None)        
-        order = Order(symbol, ORDER_TYPE_BUY, strategy)
+        position = self.__current_positions.get(symbol,None)        
+        order = Order(symbol, ORDER_TYPE_BUY, strategy, listener)
         if position and position.type < 0:
             order.volume_initial = volume + position.volume
         else:
             order.volume_initial = volume
         if self.__backtesting:
-            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listner).get_time_frame()]['time']
+            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listener).get_time_frame()]['time'][0]
         else:
             time_ = time.time()
         order.time_setup = int(time_)
         order.time_setup_msc = int((time_ - int(time_))*(10**6))
         return(self.send_order(order))
     #----------------------------------------------------------------------
-    def cover(symbol, volume=1, price=None, stop=False, limit=False, strategy=None, listner=None):
+    def cover(self, symbol, volume=1, price=None, stop=False, limit=False, strategy=None, listener=None):
         if volume == 0: return        
-        position = self.__map_symbol_position.get(symbol,None)        
-        order = Order(symbol, ORDER_TYPE_BUY, strategy)
+        position = self.__current_positions.get(symbol,None)        
+        order = Order(symbol, ORDER_TYPE_BUY, strategy, listener)
         if not position or position.type >= 0:
             return#XXX可能的返回值
         order.volume_initial = volume
         if self.__backtesting:
-            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listner).get_time_frame()]['time']
+            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listener).get_time_frame()]['time'][0]
         else:
             time_ = time.time()
         order.time_setup = int(time_)
         order.time_setup_msc = int((time_ - int(time_))*(10**6))
         return(self.send_order(order))
     #----------------------------------------------------------------------
-    def short(symbol, volume=1, price=None, stop=False, limit=False, strategy=None, listner=None):
+    def short(self, symbol, volume=1, price=None, stop=False, limit=False, strategy=None, listener=None):
         if volume == 0: return        
-        position = self.__map_symbol_position.get(symbol,None)        
-        order = Order(symbol, ORDER_TYPE_SELL, strategy)        
+        position = self.__current_positions.get(symbol,None)        
+        order = Order(symbol, ORDER_TYPE_SELL, strategy, listener)        
         if position and position.type > 0:
             order.volume_initial = volume + position.volume
         else:
             order.volume_initial = volume
         if self.__backtesting:
-            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listner).get_time_frame()]['time']
+            time_ = self.__datas[symbol][SymbolsListener.get_by_id(listener).get_time_frame()]['time'][0]
         else:
             time_ = time.time()
         order.time_setup = int(time_)
