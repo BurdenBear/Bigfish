@@ -24,7 +24,7 @@ class DataGeneratorTushare(DataGenerator):
         return(event)
         
     def _get_datas(self, symbol, time_frame, start_time=None, end_time=None):
-        if time_frame == '1D':
+        if time_frame == 'D1':
             datas = ts.get_hist_data(symbol,start_time,end_time)
             return(datas.apply(partial(self.__data_to_event,symbol,time_frame),axis=1).tolist())
         else:
@@ -41,6 +41,7 @@ class Backtesting:
     def start(self):
         self.strategy_engine.start()
         self.data_generator.start()
+        self.strategy_engine.wait()
         
     def get_profit(self):
         return(self.strategy_engine.get_profit())

@@ -5,7 +5,6 @@ Created on Wed Nov 25 20:46:00 2015
 @author: BurdenBear
 """
 
-import json
 from Bigfish.utils.common import Currency
 
 
@@ -25,9 +24,12 @@ class AccountManager:
         self.__capital_cash = self.__capital_base
         self.__records = []
     
-    def set_captital_base(self, captital_base):
-        self.__capital_base = captital_base
-        self.initialize
+    def set_capital_base(self, capital_base):
+        if isinstance(capital_base, int) and capital_base > 0:
+            self.__capital_base = capital_base
+            self.initialize
+        else:
+            raise(ValueError("不合法的base值%s"%capital_base))
         
     def is_margin_enough(self, price):
         """判断账户保证金是否足够"""
@@ -35,8 +37,8 @@ class AccountManager:
             
     def update_deal(self, deal):
         self.__capital_cash += deal.profit
-        self.__records.append({'x':deal.time+deal.time_msc/(10**6),'y':self.__capital_cash/self.__capital_base})
+        self.__records.append({'x':deal.time+deal.time_msc/(10**6),'y':float('%.2f'%((self.__capital_cash/self.__capital_base-1)*100))})
     
     def get_profit(self):
-        return(json.dumps(self.__records))
+        return(self.__records)
         

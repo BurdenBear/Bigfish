@@ -55,10 +55,8 @@ class EventEngine:
         
         # 事件引擎开关
         self.__active = False
-        
-        # 事件处理线程
-        self.__thread = Thread(target = self.__run)
-        
+        self.__finished = False
+        self.__thread = None
         # 计时器，用于触发计时器事件
         #self.__timer = QTimer()
         #self.__timer.timeout.connect(self.__onTimer)
@@ -73,10 +71,11 @@ class EventEngine:
         """引擎运行"""
         while self.__active == True:
             try:
-                event = self.__queue.get(block = True, timeout = 1)  # 获取事件的阻塞时间设为1秒
+                event = self.__queue.get(block = True, timeout = 0.5)  # 获取事件的阻塞时间设为0.5秒
                 self.__process(event)
             except Empty:
-                pass
+                if self.__finished:
+                    self.__active = False
             
     #----------------------------------------------------------------------
     def __process(self, event):
@@ -101,7 +100,9 @@ class EventEngine:
         """引擎启动"""
         # 将引擎设为启动
         self.__active = True
+        self.__finished = False
         # 启动事件处理线程
+        self.__thread = Thread(target = self.__run)
         self.__thread.start()
         # 启动计时器，计时器事件间隔默认设定为1秒
         #self.__timer.start(1000)
@@ -110,11 +111,18 @@ class EventEngine:
     def stop(self):
         """停止引擎"""
         # 将引擎设为停止
-        self.__active = False
-              
-        # 等待事件处理线程退出
-        self.__thread.join()
-            
+        if self.__active == True:
+            self.__active = False
+            self.__thread.join() # 等待事件处理线程退出
+        if self.__thread:           
+            self.__thread = None
+    #-----------------------------------------------------------------------
+    def wait(self):
+        """等待队列中所有事件被处理完成"""
+        if self.__active == True:
+            self.__finished = True
+            self.__thread.join()
+            self.stop()
     #----------------------------------------------------------------------
     def register(self, type_, handler):
         """注册事件处理函数监听"""

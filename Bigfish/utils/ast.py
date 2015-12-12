@@ -28,14 +28,9 @@ class LocalsInjector(ast.NodeVisitor):
         if (self.__depth == 2) and (node.name in self.__to_inject):        
             #print("function<%s> find!" % node.name)
             #print(ast.dump(node))
-            code = 'import functools\n'
-            code += '__globals = globals()\n'
-            for name, value in self.__to_inject[node.name].items():
-                code += '%s = %s\n' % (name, value)
-            code += 'barnum = 0\n'
-            code += 'del(functools)\n'
-            code += 'del(__globals\n)'
-            code_ast = ast.parse(code, mode = 'exec')
+            code = '\n'.join(self.__to_inject[node.name])       
+            code += '\nbarnum = 0\n'
+            code_ast = ast.parse(code)
             barnum_ast = ast.parse('barnum += 1')
             while_node = ast.While(test=ast.NameConstant(value=True),
             body = barnum_ast.body+node.body+[ast.Expr(value=ast.Yield(value=None))],

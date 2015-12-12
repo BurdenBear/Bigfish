@@ -24,12 +24,12 @@ def set_attr(self, value, attr='', check=lambda x:None, handle=None):
         setattr(self,'_%s__%s'%(self.__class__.__name__,attr),after_check)
 ###################################################################
 _TIME_FRAME = {item:n for n, item in
-               enumerate(['1W','1D','1H','30M','15M','10M','5M','1M'])}
-_TIME_FRAME_PERIOD ={'1W':604800,'1D':86400,'1H':3600,'30M':1800,'15M':900,'10M':600,'5M':300,'1M':60}
+               enumerate(['W1','D1','H1','M30','M15','M10','M5','M1'])}
+_TIME_FRAME_PERIOD ={'W1':604800,'D1':86400,'H1':3600,'M30':1800,'M15':900,'M10':600,'M5':300,'M1':60}
 
 def check_time_frame(time_frame):
     if not time_frame in _TIME_FRAME.keys():
-        raise(ValueError("不合法的time_frame值"))
+        raise(ValueError("不合法的time_frame值:%s"%time_frame))
     return True
 def get_time_frame_bit(time_frame):
     check_time_frame(time_frame)

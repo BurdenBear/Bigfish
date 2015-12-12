@@ -13,17 +13,18 @@ from Bigfish.utils.common import check_time_frame, HasID
 #%%策略容器，在初始化时定制一策略代码并在Onbar函数中运行他们
 ########################################################################
 class Strategy(HasID):    
-    ATTRS_MAP = {"period":"time_frame", "symbols":"symbols", "start":"start_time", "end":"end_time", "maxlen":"max_length" }  
+    ATTRS_MAP = {"timeframe":"time_frame", "base":"capital_base", "symbols":"symbols", "start":"start_time", "end":"end_time", "maxlen":"max_length" }  
     #----------------------------------------------------------------------
     def __init__(self, engine, id_, name, code):
         """Constructor""" 
-        self.__id = id_        
+        self.__id = id_
         self.name = name
         self.engine = engine
         self.time_frame = None
         self.symbols = set()
         self.start_time = None
         self.end_time = None
+        self.capital_base = 100000        
         self.handlers = {}
         self.listeners = {}
         self.__context = {}      
@@ -70,16 +71,21 @@ class Strategy(HasID):
         globals_ = {}           
         exec(code,globals_,locals_)
         get_global_attrs(locals_)
+        self.engine.set_capital_base(self.capital_base)
         globals_.update(self.__locals_)
         globals_.update(locals_)
         self.engine.start_time = self.start_time
         self.engine.end_time = self.end_time
         check_time_frame(self.time_frame)
         to_inject = {}
-        temp = {key:"__globals['%s']" % key for key in self.__locals_.keys()
-                if key not in ['sell','buy','short','cover']}
+        code_lines = ["import functools", "__globals = globals()"]
+        code_lines.extend(["%s = __globals['%s']" % (key, key) for key in self.__locals_.keys()
+                if key not in ["sell","buy","short","cover"]])
         for key , value in locals_.items():
             if inspect.isfunction(value):
+                if key == "init":
+                    #TODO init中可以设定全局变量，所以要以"global foo"的方式进行注入，监听的事件不同所以要改写SymbolsListener
+                    continue    
                 paras = inspect.signature(value).parameters
                 data_handler = get_parameter_default(paras, "data_handler", lambda x:isinstance(x,bool), True)
                 if not data_handler:
@@ -92,11 +98,12 @@ class Strategy(HasID):
                     max_length = get_parameter_default(paras, "maxlen", lambda x: isinstance(int)and(x>0), 0)                                    
                     self.engine.add_symbols(symbols,time_frame,max_length)
                     self.listeners[key] = SymbolsListener(self.engine, symbols, time_frame)
-                    for field in ["open","high","low","close","time","volume"]:
-                        temp[field] = "__globals['datas']['%s']['%s']['%s']" % (symbols[0], time_frame, field)
-                    for field in ["buy","short","sell","cover"]:
-                        temp[field] = "functools.partial(__globals['%s'],listener=%d)" % (field,self.listeners[key].get_id())
-                    to_inject[key] = temp
+                    temp = []                    
+                    temp.extend(["%s = __globals['datas']['%s']['%s']['%s']" % (field, symbols[0], time_frame, field)
+                                 for field in ["open","high","low","close","time","volume"]])
+                    temp.extend(["%s = functools.partial(__globals['%s'],listener=%d)" % (field, field, self.listeners[key].get_id())
+                                  for field in ["buy","short","sell","cover"]])    
+                    to_inject[key] = code_lines + temp + ["del(functools)", "del(__globals)"]
                 else:
                     #TODO自定义事件处理
                     pass

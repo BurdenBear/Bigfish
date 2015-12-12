@@ -22,10 +22,10 @@ class StrategyEngine(object):
     """策略引擎"""
     CACHE_MAXLEN = 10000
     #----------------------------------------------------------------------
-    def __init__(self, event_engine=EventEngine(), account_manager=AccountManager(), backtesting=False):
+    def __init__(self, backtesting=False):
         """Constructor"""
-        self.__event_engine = event_engine # 事件处理引擎
-        self.__account_manager = account_manager #账户管理
+        self.__event_engine = EventEngine() # 事件处理引擎
+        self.__account_manager = AccountManager() #账户管理
         self.__backtesting = backtesting # 是否为回测  
         self.__orders_done = {} # 保存所有已处理报单数据的字典
         self.__orders_todo = {} # 保存所有未处理报单（即挂单）数据的字典
@@ -53,6 +53,12 @@ class StrategyEngine(object):
     #----------------------------------------------------------------------
     def get_datas(self):
         return(self.__datas)
+    #----------------------------------------------------------------------
+    def get_profit(self):
+        return(self.__account_manager.get_profit())
+    #----------------------------------------------------------------------
+    def set_capital_base(self, base):
+        self.__account_manager.set_capital_base(base)
     #----------------------------------------------------------------------
     def add_symbols(self, symbols, time_frame, max_length = 0):
         for symbol in symbols:
@@ -167,10 +173,6 @@ class StrategyEngine(object):
         self.__deals[deal.get_id()] = deal
         if deal.profit != 0:
             self.__account_manager.update_deal(deal)
-    
-    def get_profit(self):
-        return(self.__account_manager.get_profit())
-
     #----------------------------------------------------------------------
     @staticmethod
     def check_order(order):
@@ -261,7 +263,10 @@ class StrategyEngine(object):
         """停止所有策略"""
         self.__event_engine.stop()        
         for strategy in self.__strategys.values():
-            strategy.stop()        
+            strategy.stop() 
+    def wait(self):
+        self.__event_engine.wait()
+        self.stop()
     #TODO 对限价单的支持    
     #----------------------------------------------------------------------
     def sell(self, symbol, volume=1, price=None, stop=False ,limit=False, strategy=None, listener=None):
