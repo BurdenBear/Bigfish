@@ -164,6 +164,7 @@ class StrategyEngine(object):
         position_now.deal = deal.get_id()
         self.__current_positions[deal.symbol] = position_now
         self.__positions[position_now.get_id()] = position_now
+        self.__deals[deal.get_id()] = deal
         if deal.profit != 0:
             self.__account_manager.update_deal(deal)
     
@@ -186,12 +187,11 @@ class StrategyEngine(object):
             order.time_done_msc = int((time_-int(time_))*(10**6))
             order.volume_current = order.volume_initial
             deal = Deal(order.symbol, order.strategy, order.handle)
+            deal.volume = order.volume_current                        
             deal.time = order.time_done
             deal.time_msc = order.time_done_msc
-            deal.volume = order.volume_initial
-            deal.type = 1-((order.type&1)<<1)
+            deal.type = 1-((order.type&1)<<1) #参见ENUM_ORDER_TYPE和ENUM_DEAL_TYPE的定义
             deal.price = self.__datas[order.symbol][time_frame]["close"][0]
-            deal.profit = deal.price*deal.type*deal.volume
             #TODO加入手续费等
             order.deal = deal.get_id()
             deal.order = order.get_id()

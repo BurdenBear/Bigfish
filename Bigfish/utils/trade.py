@@ -119,7 +119,7 @@ DEAL_ENTRY_IN = 1 # Entry in
 DEAL_ENTRY_OUT = 0 # Entry out
 DEAL_ENTRY_INOUT = -1 # Reverse
 
-class Deal(HasID):
+class Deal(HasID, DictLike):
     """成交对象"""
     __slots__ = ["symbol", "__id", "order", "position", "time", "time_msc", "type",
                  "volume", "price", "commission", "profit", "strategy", "handle"]
