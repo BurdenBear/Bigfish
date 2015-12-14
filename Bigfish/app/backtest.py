@@ -43,8 +43,8 @@ class Backtesting:
         self.data_generator.start()
         self.strategy_engine.wait()
         
-    def get_profit(self):
-        return(self.strategy_engine.get_profit())
+    def get_profit_records(self):
+        return(self.strategy_engine.get_profit_records())
         
     def stop(self):
         self.strategy_engine.stop()

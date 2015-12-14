@@ -37,8 +37,8 @@ class Strategy(HasID):
                     "short":partial(self.engine.short, strategy = self.__id),
                     "buy":partial(self.engine.buy, strategy = self.__id),
                     "cover":partial(self.engine.cover, strategy = self.__id),
-                    "marketposition":self.engine.get_positions(),
-                    "currentcontracts":self.engine.get_currentcontracts(),
+                    "marketposition":self.engine.get_current_positions(),
+                    "currentcontracts":self.engine.get_current_contracts(),
                     "datas":self.engine.get_datas(),
                     "context":self.__context
                    }
