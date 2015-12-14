@@ -31,9 +31,10 @@ def check_time_frame(time_frame):
     if not time_frame in _TIME_FRAME.keys():
         raise(ValueError("不合法的time_frame值:%s"%time_frame))
     return True
+    
 def get_time_frame_bit(time_frame):
     check_time_frame(time_frame)
-    return(1 << _TIME_FRAME[time_frame])
+    return(1 << _TIME_FRAME[time_frame])    
 ###################################################################
 def __replace_all(string, olds, new):
     for old in olds:
@@ -66,21 +67,6 @@ def quick_sort(l, r, arr, key):
             j -= 1
     if j > l: quick_sort(l,j,arr,key)
     if i < r: quick_sort(i,r,arr,key)
-###################################################################
-class Symbol():
-    @classmethod
-    def _get_all_symbols(cls):
-        #TODO 真正的获取symbol，拟定从数据库中获取
-        #TODO 资产的其他信息，如滑点、手续费等信息
-        #将以json的形式存于文件或数据库中        
-        return(["USD/EUR",'600848'])
-    def __init__(self, name=""):
-        pass
-###################################################################
-class Currency:
-    """货币对象"""
-    def __init__(self, name=""):
-        self.__name = name
 ###################################################################
 class DictLike():
     __slots__=[]

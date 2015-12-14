@@ -6,4 +6,4 @@ Created on Wed Nov  4 11:58:21 2015
 """
 
 __author__ = ["Bigfish.BurdenBear"]
-__all__ = ["ast", "common", "quote", "trade", "log"]
+__all__ = ["ast", "common", "quote", "trade", "log", "base"]

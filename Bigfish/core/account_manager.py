@@ -5,7 +5,7 @@ Created on Wed Nov 25 20:46:00 2015
 @author: BurdenBear
 """
 
-from Bigfish.utils.common import Currency
+from Bigfish.utils.base import Currency
 
 
 ###################################################################
