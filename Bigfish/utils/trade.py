@@ -6,6 +6,7 @@ Created on Fri Nov 27 09:59:13 2015
 """
 
 from Bigfish.utils.common import HasID, DictLike
+"""所有的数据结构都继承HasID，通过ID来访问，以便于以后在数据库中存储"""
 
 #ENUM_POSITION_TYPE
 POSITION_TYPE_BUY = 1
@@ -121,7 +122,7 @@ DEAL_ENTRY_INOUT = -1 # Reverse
 
 class Deal(HasID, DictLike):
     """成交对象"""
-    __slots__ = ["symbol", "__id", "order", "position", "time", "time_msc", "type",
+    __slots__ = ["symbol", "__id", "order", "position", "time", "time_msc", "type", "entry",
                  "volume", "price", "commission", "profit", "strategy", "handle"]
                  
     def __init__ (self, symbol=None, strategy=None, handle=None):
@@ -132,10 +133,11 @@ class Deal(HasID, DictLike):
         self.time = None
         self.time_msc = None
         self.type = None
+        self.entry = None
         self.volume = 0
         self.price = 0
         self.commission = 0
-        self.profit = 0
+        self.profit = None
         self.strategy = strategy
         self.handle = handle
         

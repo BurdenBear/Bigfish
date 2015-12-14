@@ -33,7 +33,7 @@ class StrategyEngine(object):
         self.__positions = {} # Key:id, value:position with responding id
         self.__strategys = {} # 保存策略对象的字典,key为策略名称,value为策略对象        
         self.__datas = {} # 统一的数据视图
-        self.__symbols = {} # 数据中所包含的交易物品种及各自存储的长度        
+        self.__symbols = {} # key:(symbol,timeframe),value:maxlen       
         self.start_time = None
         self.end_time = None        
         self.__current_positions = {} # key：symbol，value：current position
@@ -43,19 +43,79 @@ class StrategyEngine(object):
     start_time = property(partial(get_attr,attr='start_time'), partial(set_attr,attr='start_time'),None)
     end_time = property(partial(get_attr,attr='end_time'), partial(set_attr,attr='end_time'),None)
     #----------------------------------------------------------------------
-    def get_currentcontracts(self):
+    def get_current_contracts(self):
         #TODO 现在持仓手数        
         return()
     #----------------------------------------------------------------------
-    def get_positions(self):
+    def get_current_positions(self):
         #TODO 读取每个品种的有效Position       
         return(self.__current_positions)
     #----------------------------------------------------------------------
     def get_datas(self):
         return(self.__datas)
     #----------------------------------------------------------------------
-    def get_profit(self):
-        return(self.__account_manager.get_profit())
+    def get_profit_records(self):
+        """获取平仓收益记录"""
+        return(self.__account_manager.get_profit_records())
+    #----------------------------------------------------------------------
+    def get_position_records(self):
+        """获取仓位收益记录"""
+        def get_point(deal, entry, volume):
+            if entry == DEAL_ENTRY_IN:
+                if deal.type == DEAL_TYPE_BUY:
+                    return({'type':'point','x':deal.time+deal.time_msc/(10**6),
+                            'y':deal.price,'color':'buy','text':'Buy %s'%volume})
+                elif deal.type == DEAL_TYPE_SELL:
+                    return({'type':'point','x':deal.time+deal.time_msc/(10**6),
+                            'y':deal.price,'color':'short','text':'Short %s'%volume})
+            elif entry == DEAL_ENTRY_OUT:
+                if deal.type == DEAL_TYPE_BUY:
+                    return({'type':'point','x':deal.time+deal.time_msc/(10**6),
+                            'y':deal.price,'color':'cover','text':'Cover %s'%volume})
+                elif deal.type == DEAL_TYPE_SELL:
+                    return({'type':'point','x':deal.time+deal.time_msc/(10**6),
+                            'y':deal.price,'color':'sell','text':'Sell %s'%volume})
+        def get_lines(position_start, position_end):
+            deal_start = self.__deals[position_start.deal]
+            deal_end = self.__deals[position_end.deal]
+            start_time = deal_start.time+deal_start.time_msc/(10**6)
+            end_time = deal_end.time+deal_end.time_msc/(10**6)
+            result = {'type':'line','x_start':start_time,'x_end':end_time,'y_start':deal_start.price,
+                      'y_end':deal_end.price}            
+            if (deal_end.type == DEAL_TYPE_BUY)^(deal_start.price>=deal_end.price):
+                result['color'] = 'win' 
+            else:
+                result['color'] = 'lose'
+        def next_position(position):
+            return(self.__positions.get(position.next_id,None))
+        def prev_position(position):
+            return(self.__positions.get(position_prev_id,None))
+        result = []
+        stack = []     
+        for symbol in {symbol for (symbol, _) in self.__symbols}:
+            position = next_postion(self.__init_positions[symbol])
+            while (position != None):
+                deal = self.__deals[position.deal]                
+                if deal.entry == DEAL_ENTRY_IN: #open or overweight position
+                    result.append(get_point(deal, DEAL_ENTRY_IN, deal.volume))
+                    stack.append((postion,deal.volume))
+                else:
+                    if deal.entry == DEAL_ENTRY_INOUT: #reverse position
+                        volume_left = deal.volume - position.volume
+                        result.append(get_point(deal, DEAL_ENTRY_IN, position.volume))
+                    else: #underweight position
+                        volume_left = deal.volume
+                    result.append(get_point(deal, DEAL_ENTYR_OUT, volume_left))
+                    while volume_left > 0:
+                        position_start, volume = stack.pop()
+                        result.append(get_line(position_start, position))
+                        volume_left -= volume
+                    if volume_left < 0:
+                        stack.append(position_start, -volume_left)
+                    elif deal.entry == DEAL_ENTRY_INOUT and position.volume > 0:
+                        stack.append((position, position.volume))
+                position = next_postion(position)
+        return(result)
     #----------------------------------------------------------------------
     def set_capital_base(self, base):
         self.__account_manager.set_capital_base(base)
@@ -131,6 +191,7 @@ class StrategyEngine(object):
         position = position_prev.type
         #XXX常量定义改变这里的映射函数也可能改变
         if deal.type * position >= 0:
+            deal.entry = DEAL_ENTRY_IN
             if position == 0: #open position
                 position_now.price_open = deal.price
                 position_now.time_open = deal.time
@@ -147,21 +208,24 @@ class StrategyEngine(object):
             position_now.volume = abs(contracts)
             position_now.type = position * sign(contracts)
             if position_now.type == 0: #close position
+                deal.entry = DEAL_ENTRY_OUT
                 deal.profit = (deal.price-position_prev.price_current)*position*position_prev.volume              
                 position_now.price_current = 0
                 position_now.volume = 0 #防止浮点数精度可能引起的问题
                 position_now.time_open = position_prev.time_open
                 position_now.time_open_msc = position_prev.time_open_msc
             elif position_now != position: #reverse position
+                deal.entry = DEAL_ENTRY_INOUT
                 deal.profit = (deal.price-position_prev.price_current)*position*position_prev.volume
                 position_now.price_current = deal.price
                 position_now.time_open = deal.time
                 position_now.time_open_msc = deal.time_msc
                 position_now.price_open = price_now.price_current
             else: #underweight position
-                #XXX 平部分仓位是直接计算入平仓收益还是将收益暂时算在浮动中              
-                position_now.price_current = (position_prev.price_current*position_prev.volume
-                -deal.price*deal.volume)/(position_prev.volume-deal.volume)
+                #XXX 平部分仓位是直接计算入平仓收益还是将收益暂时算在浮动中
+                deal.entry = DEAL_ENTRY_OUT                
+                deal.profit = (deal.price-position_prev.price_current)*position*deal.volume            
+                position_now.price_current = position_prev.price_current
                 position_now.time_open = position_prev.time_open
                 position_now.time_open_msc = position_prev.time_open_msc
         position_now.time_update = deal.time
@@ -238,6 +302,7 @@ class StrategyEngine(object):
     #----------------------------------------------------------------------
     def put_event(self, event):
         #TODO 加入验证
+        #TODO 多了一层函数调用，尝试用绑定的形式
         self.__event_engine.put(event)
     #----------------------------------------------------------------------   
     def register_event(self, event_type, handle):
@@ -245,6 +310,7 @@ class StrategyEngine(object):
         #TODO  加入验证
         self.__event_engine.register(event_type, handle)
     def unregister_event(self, event_type, handle):
+        """取消事件监听"""
         self.__event_engine.unregister(event_type, handle)
     #----------------------------------------------------------------------
     def writeLog(self, log):
@@ -265,6 +331,7 @@ class StrategyEngine(object):
         for strategy in self.__strategys.values():
             strategy.stop() 
     def wait(self):
+        """等待所有事件处理完毕"""
         self.__event_engine.wait()
         self.stop()
     #TODO 对限价单的支持    

@@ -36,9 +36,10 @@ class AccountManager:
         return(self.__capital_cash * self.__leverage >= price)
             
     def update_deal(self, deal):
+        if not deal.profit: return
         self.__capital_cash += deal.profit
         self.__records.append({'x':deal.time+deal.time_msc/(10**6),'y':float('%.2f'%((self.__capital_cash/self.__capital_base-1)*100))})
     
-    def get_profit(self):
+    def get_profit_records(self):
         return(self.__records)
         
